@@ -1,96 +1,142 @@
 
+import streamlit as st
+from io import BytesIO
 from pathlib import Path
+import tempfile
 
 from report_generator.file_reader import read_file
 from report_generator.config_loader import load_config
+from report_generator.template_loader import load_templates
 from report_generator.document_builder import build_report
 
 
-# Locate the project folders.
-PROJECT_DIRECTORY = Path(__file__).resolve().parent
-CONFIG_PATH = PROJECT_DIRECTORY / "config" / "report_format.json"
-OUTPUT_DIRECTORY = PROJECT_DIRECTORY / "output"
-SAMPLES_DIRECTORY = PROJECT_DIRECTORY / "samples"
+# Project paths
+BASE_DIR = Path(__file__).resolve().parent
+CONFIG_PATH = BASE_DIR / "config" / "report_format.json"
+TEMPLATES_PATH = BASE_DIR / "config" / "templates.json"
+LOGO_PATH = BASE_DIR / "assets" / "logo.png"
 
 
-def generate_report_from_text(text, output_name="generated_report"):
-    """
-    Generate a Word report from text supplied by a user.
-    This function can be called by a frontend.
-    """
+# Page settings
+st.set_page_config(
+    page_title="DocScholar - AI Report Generator",
+    page_icon=str(LOGO_PATH) if LOGO_PATH.exists() else "📄",
+    layout="centered",
+)
 
-    # Load the report formatting settings.
+st.title("DocScholar")
+st.subheader("AI Report Generator")
+st.write("Turn your content into a professionally formatted Word report.")
+
+st.divider()
+
+
+# Load templates and configuration
+try:
     config = load_config(CONFIG_PATH)
+    templates = load_templates(TEMPLATES_PATH)
+except Exception as error:
+    st.error(f"Could not load configuration: {error}")
+    st.stop()
 
-    # Create a safe output filename.
-    safe_name = Path(output_name).stem
 
-    if not safe_name or safe_name in {".", ".."}:
-        safe_name = "generated_report"
+# Input section
+st.header("1. Enter your content")
 
-    output_path = OUTPUT_DIRECTORY / f"{safe_name}_report.docx"
+input_method = st.radio(
+    "Choose an input method",
+    ["Type or paste text", "Upload a PDF or DOCX"],
+)
 
-    # Build and save the Word report.
-    saved_path = build_report(
-        text,
-        config,
-        output_path
+report_text = ""
+
+if input_method == "Type or paste text":
+    report_text = st.text_area(
+        "Your report content",
+        height=220,
+        placeholder="Paste your content here...",
     )
 
-    return saved_path
-
-
-def generate_report_from_file(file_path):
-    """
-    Read a supported file and generate a Word report from its text.
-    """
-
-    file_path = Path(file_path)
-
-    # Extract the text from the uploaded or selected file.
-    text = read_file(file_path)
-
-    # Use the source filename to name the generated report.
-    return generate_report_from_text(
-        text,
-        output_name=file_path.stem
+else:
+    uploaded_file = st.file_uploader(
+        "Upload your document",
+        type=["pdf", "docx", "txt"],
     )
 
+    if uploaded_file is not None:
+        try:
+            suffix = Path(uploaded_file.name).suffix
 
-def generate_report():
-    """
-    Run the application through the terminal.
-    """
+            with tempfile.NamedTemporaryFile(
+                suffix=suffix,
+                delete=True,
+            ) as temp_file:
+                temp_file.write(uploaded_file.getvalue())
+                temp_file.flush()
+                report_text = read_file(temp_file.name)
 
-    # Ask the user for a filename inside the samples folder.
-    file_name = input(
-        "Enter a TXT, PDF, or DOCX filename: "
-    ).strip()
+            st.success("File read successfully.")
 
-    if not file_name:
-        print("Error: Please enter a filename.")
-        return
-
-    source_path = SAMPLES_DIRECTORY / file_name
-
-    # Prevent access to files outside the samples folder.
-    if source_path.resolve().parent != SAMPLES_DIRECTORY.resolve():
-        print("Error: Please enter a filename from the samples folder.")
-        return
-
-    try:
-        # Generate the report using the reusable backend function.
-        saved_path = generate_report_from_file(source_path)
-
-        print("\nReport generated successfully!")
-        print(f"Saved to: {saved_path}")
-
-    except (FileNotFoundError, ValueError, OSError, RuntimeError) as error:
-        print(f"\nError: {error}")
+        except Exception as error:
+            st.error(f"Could not read the file: {error}")
 
 
-if __name__ == "__main__":
-    generate_report()
+# Report settings
+st.header("2. Report settings")
+
+report_title = st.text_input(
+    "Report title",
+    value="My Report",
+)
+
+selected_template = st.selectbox(
+    "Choose a template",
+    list(templates.keys()),
+)
+
+
+# Generate report
+st.header("3. Generate your report")
+
+if st.button("Generate Word Report", type="primary"):
+    if not report_text.strip():
+        st.warning("Please enter text or upload a document first.")
+
+    elif not report_title.strip():
+        st.warning("Please enter a report title.")
+
+    else:
+        try:
+            report_config = config.copy()
+            report_config.update(templates[selected_template])
+            report_config["report_title"] = report_title.strip()
+
+            output = BytesIO()
+            build_report(report_text, report_config, output)
+
+            st.session_state["report_bytes"] = output.getvalue()
+            safe_title = (
+                report_title.strip()
+                .replace("/", "-")
+                .replace("\\", "-")
+            )
+            st.session_state["report_name"] = f"{safe_title}.docx"
+
+            st.success("Your report is ready!")
+
+        except Exception as error:
+            st.error(f"Report generation failed: {error}")
+
+
+# Download report
+if "report_bytes" in st.session_state:
+    st.download_button(
+        label="Download Word Report",
+        data=st.session_state["report_bytes"],
+        file_name=st.session_state["report_name"],
+        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
+
 
 
 
