@@ -134,17 +134,40 @@ except (FileNotFoundError, ValueError, OSError) as error:
 # 5. HEADER
 # --------------------------------------------------
 
+
+# Convert the logo image into a format that HTML can display
+with open(LOGO_PATH, "rb") as logo_file:
+    logo_base64 = base64.b64encode(logo_file.read()).decode("utf-8")
+
+# Display the header with our custom logo
 st.markdown(
-    """
+    f"""
     <div class="hero">
-        <h1>📄 DocScholar</h1>
+        <h1 style="
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        ">
+            <img
+                src="data:image/png;base64,{logo_base64}"
+                alt="AI Report Generator Logo"
+                style="
+                    width: 64px;
+                    height: 64px;
+                    object-fit: contain;
+                "
+            >
+            <span>DocScholar</span>
+        </h1>
+
         <p>
-            The AI report generator
+            The AI report generator.
         </p>
     </div>
     """,
     unsafe_allow_html=True,
 )
+
 
 
 # --------------------------------------------------
