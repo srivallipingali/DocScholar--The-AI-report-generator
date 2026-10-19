@@ -1,0 +1,26 @@
+
+{
+    "report_title": "College Reports ",
+    "font_name": "Times New Roman",
+    "font_size": 12,
+    "margins": {
+        "top": 0.8,
+        "bottom": 0.8,
+        "left": 1.0,
+        "right": 1.0
+    },
+    "sections": [
+        {
+            "heading": "Introduction",
+            "content": "The AI Report Generator transforms user-provided information into structured reports."
+        },
+        {
+            "heading": "Objectives",
+            "content": "The system aims to support configurable templates and automated document formatting."
+        },
+        {
+            "heading": "Conclusion",
+            "content": "This project establishes the foundation for an automated report generation system."
+        }
+    ]
+}

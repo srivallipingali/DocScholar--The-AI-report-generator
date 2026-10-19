@@ -1,0 +1,388 @@
+from io import BytesIO
+from pathlib import Path
+import tempfile
+import base64
+
+import streamlit as st
+
+from report_generator.config_loader import load_config
+from report_generator.document_builder import build_report
+from report_generator.file_reader import read_file
+from report_generator.template_loader import load_templates
+
+
+# --------------------------------------------------
+# 1. PROJECT PATHS
+# --------------------------------------------------
+
+PROJECT_DIRECTORY = Path(__file__).resolve().parent
+CONFIG_PATH = PROJECT_DIRECTORY / "config" / "report_format.json"
+TEMPLATES_PATH = PROJECT_DIRECTORY / "config" / "templates.json"
+LOGO_PATH = PROJECT_DIRECTORY / "assets" / "logo.png"
+
+# --------------------------------------------------
+# 2. PAGE SETTINGS
+# --------------------------------------------------
+
+st.set_page_config(
+    page_title="DocScholar",
+    page_icon="📄",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
+
+
+# --------------------------------------------------
+# 3. CUSTOM DESIGN
+# --------------------------------------------------
+
+st.markdown(
+    """
+    <style>
+        .stApp {
+            background-color: #e084a6;
+        }
+
+        .block-container {
+            max-width: 1100px;
+            padding-top: 2.5rem;
+            padding-bottom: 3rem;
+        }
+
+        .hero {
+            background: linear-gradient(120deg, #a8234b, #a8234b);
+            padding: 2.2rem;
+            border-radius: 18px;
+            color: purple;
+            margin-bottom: 1.8rem;
+        }
+
+        .hero h1 {
+            font-family: "Caveat", cursive;
+            color: #dec3ab;
+            font-size: 4.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .hero p {
+            color: #dec3ab;
+            font-size: 2.5rem;
+            margin-bottom: 0;
+        }
+
+        .section-heading {
+            color: #4c227d;
+            font-size: 2rem;
+            font-weight: 700;
+            margin-top: 0.8rem;
+            margin-bottom: 0.3rem;
+        }
+
+        .section-description {
+            color: #b52134;
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        div[data-testid="stVerticalBlockBorderWrapper"] {
+            background-color: white;
+            border-radius: 14px;
+            border-color: #360314;
+        }
+
+        div.stButton > button[kind="primary"] {
+            background-color: #480870;
+            color: white;
+            border-radius: 9px;
+            border: none;
+            min-height: 3rem;
+            font-weight: 600;
+        }
+
+        div.stButton > button[kind="primary"]:hover {
+            background-color: #690442;
+            color: #2e7d8c;
+        }
+
+        div[data-testid="stDownloadButton"] button {
+            border-radius: 9px;
+            min-height: 2.8rem;
+            font-weight: 600;
+        }
+
+        footer {
+            visibility: hidden;
+        }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+
+# --------------------------------------------------
+# 4. LOAD TEMPLATES
+# --------------------------------------------------
+
+try:
+    templates = load_templates(TEMPLATES_PATH)
+except (FileNotFoundError, ValueError, OSError) as error:
+    st.error(f"Could not load report templates: {error}")
+    st.stop()
+
+
+# --------------------------------------------------
+# 5. HEADER
+# --------------------------------------------------
+
+st.markdown(
+    """
+    <div class="hero">
+        <h1>📄 DocScholar</h1>
+        <p>
+            The AI report generator
+        </p>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+
+# --------------------------------------------------
+# 6. INPUT SECTION
+# --------------------------------------------------
+
+st.markdown(
+    '<div class="section-heading">01  |  Your content</div>',
+    unsafe_allow_html=True,
+)
+
+st.markdown(
+    '<div class="section-description">'
+    'Give us your input'
+    '</div>',
+    unsafe_allow_html=True,
+)
+
+report_text = ""
+
+with st.container(border=True):
+
+    input_method = st.selectbox(
+        "Enter your choice of input method",
+        ["Type or paste text", "Upload a PDF or DOCX"],
+    )
+
+    if input_method == "Type or paste text":
+
+        report_text = st.text_area(
+            "Report content",
+            height=260,
+            placeholder=(
+                "Enter Title\n\n"
+                "Press Enter for body text."
+            ),
+        )
+
+        st.caption(
+            "The first line becomes a heading inside your Word document."
+        )
+
+    else:
+
+        uploaded_file = st.file_uploader(
+            "Choose your source document",
+            type=["pdf", "docx"],
+            help="Upload a readable PDF or Word document.",
+        )
+
+        if uploaded_file is not None:
+
+            suffix = Path(uploaded_file.name).suffix
+
+            try:
+                with tempfile.NamedTemporaryFile(
+                    suffix=suffix,
+                    delete=True,
+                ) as temporary_file:
+
+                    temporary_file.write(uploaded_file.getvalue())
+                    temporary_file.flush()
+
+                    report_text = read_file(temporary_file.name)
+
+                st.success(
+                    f"Successfully read: {uploaded_file.name}"
+                )
+
+            except (ValueError, OSError, RuntimeError) as error:
+                st.error(f"Could not read the document: {error}")
+
+
+# --------------------------------------------------
+# 7. REPORT SETTINGS
+# --------------------------------------------------
+
+st.markdown(
+    '<div class="section-heading">02  |  Report settings</div>',
+    unsafe_allow_html=True,
+)
+
+st.markdown(
+    '<div class="section-description">'
+    'Give your report a title and choose its formatting style.'
+    '</div>',
+    unsafe_allow_html=True,
+)
+
+with st.container(border=True):
+
+    report_title = st.text_input(
+        "Report title",
+        placeholder="e.g. Renewable Energy: A Technical Overview",
+    )
+
+    selected_template = st.selectbox(
+        "Choose a report template",
+        options=list(templates.keys()),
+    )
+
+    template_descriptions = {
+        "Academic Report": (
+            "Suitable for academic assignments, research summaries, "
+            "and college reports."
+        ),
+        "Engineering Project Report": (
+            "Suitable for technical projects, engineering documentation, "
+            "and project submissions."
+        ),
+        "Business Report": (
+            "Suitable for business analysis, proposals, and formal "
+            "professional reports."
+        ),
+        "Simple Structured Report": (
+            "A clean, minimal layout for general-purpose reports."
+        ),
+    }
+
+    st.markdown(
+    f"""
+    <p style="
+        color: white;
+        font-size: 15px;
+        margin-top: 8px;
+    ">
+        {template_descriptions.get(
+            selected_template,
+            "A predefined formatting style for your report."
+        )}
+    </p>
+    """,
+    unsafe_allow_html=True,
+)
+
+
+# --------------------------------------------------
+# 8. GENERATE THE REPORT
+# --------------------------------------------------
+
+st.markdown(
+    '<div class="section-heading">03  |  Generate your report</div>',
+    unsafe_allow_html=True,
+)
+
+st.markdown(
+    '<div class="section-description">'
+    'Generate your formatted Word document and download it below.'
+    '</div>',
+    unsafe_allow_html=True,
+)
+
+if st.button(
+    "Generate Word Report  →",
+    type="primary",
+    use_container_width=True,
+):
+
+    if not report_text.strip():
+        st.error("Please enter some text or upload a readable document.")
+
+    elif not report_title.strip():
+        st.error("Please enter a title for your report.")
+
+    else:
+
+        try:
+            config = load_config(CONFIG_PATH)
+
+            # Apply the selected template's formatting.
+            config.update(templates[selected_template])
+
+            # Use the title entered by the user.
+            config["report_title"] = report_title.strip()
+
+            # Generate the document in memory.
+            document_bytes = BytesIO()
+
+            build_report(
+                report_text,
+                config,
+                document_bytes,
+            )
+
+            st.session_state["generated_report_bytes"] = (
+                document_bytes.getvalue()
+            )
+
+            st.session_state["generated_report_name"] = (
+                report_title.strip()
+                .replace("/", "-")
+                .replace("\\", "-")
+                + ".docx"
+            )
+
+            st.session_state["generated_template"] = selected_template
+
+            st.success("Your report has been generated successfully!")
+
+        except (FileNotFoundError, ValueError, OSError, RuntimeError) as error:
+            st.error(f"Report generation failed: {error}")
+
+
+# --------------------------------------------------
+# 9. DOWNLOAD SECTION
+# --------------------------------------------------
+
+if "generated_report_bytes" in st.session_state:
+
+    st.divider()
+
+    st.markdown(
+        '<div class="section-heading">Your report is ready</div>',
+        unsafe_allow_html=True,
+    )
+
+    st.write(
+        f"Formatting used: **{st.session_state['generated_template']}**"
+    )
+
+    st.download_button(
+        label="⬇️ Download Word Report",
+        data=st.session_state["generated_report_bytes"],
+        file_name=st.session_state["generated_report_name"],
+        mime=(
+            "application/vnd.openxmlformats-officedocument."
+            "wordprocessingml.document"
+        ),
+        use_container_width=True,
+    )
+
+
+# --------------------------------------------------
+# 10. FOOTER
+# --------------------------------------------------
+
+st.divider()
+
+st.caption(
+    "© 2026 Srivalli Pingali. All rights reserved. | "
+)
