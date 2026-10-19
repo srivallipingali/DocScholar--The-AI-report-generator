@@ -160,13 +160,14 @@ st.markdown(
             <span>DocScholar</span>
         </h1>
 
-        <p>
-            The AI report generator.
-        </p>
+    The AI report generator
+
+      
     </div>
     """,
     unsafe_allow_html=True,
 )
+
 
 
 
