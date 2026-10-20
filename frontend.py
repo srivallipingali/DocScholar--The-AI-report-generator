@@ -204,52 +204,50 @@ with st.container(border=True):
     ["Type or paste text", "Upload a PDF or DOCX"],
     )
 
-    # if input_method == "Type or paste text":
+    if input_method == "Type or paste text":
 
-    #     report_text = st.text_area(
-    #         "Report content",
-    #         height=260,
-    #         placeholder=(
-    #             "Enter Title\n\n"
-    #             "Press Enter for body text."
-    #         ),
-    #     )
+        report_text = st.text_area(
+            "Report content",
+            height=260,
+            placeholder=(
+                "Enter Title\n\n"
+                "Press Enter for body text."
+            ),
+        )
 
-    #     st.caption(
-    #         "The first line becomes a heading inside your Word document."
-    #     )
+        st.caption(
+            "The first line becomes a heading inside your Word document."
+        )
 
-    # else:
+    else:
 
-    #     uploaded_file = st.file_uploader(
-    #         "Choose your source document",
-    #         type=["pdf", "docx"],
-    #         help="Upload a readable PDF or Word document.",
-    #     )
+        uploaded_file = st.file_uploader(
+            "Choose your source document",
+            type=["pdf", "docx"],
+            help="Upload a readable PDF or Word document.",
+        )
 
-    #     if uploaded_file is not None:
+        if uploaded_file is not None:
 
-    #         suffix = Path(uploaded_file.name).suffix
+            suffix = Path(uploaded_file.name).suffix
 
-    #         try:
-    #             with tempfile.NamedTemporaryFile(
-    #                 suffix=suffix,
-    #                 delete=True,
-    #             ) as temporary_file:
+            try:
+                with tempfile.NamedTemporaryFile(
+                    suffix=suffix,
+                    delete=True,
+                ) as temporary_file:
 
-    #                 temporary_file.write(uploaded_file.getvalue())
-    #                 temporary_file.flush()
+                    temporary_file.write(uploaded_file.getvalue())
+                    temporary_file.flush()
 
-    #                 report_text = read_file(temporary_file.name)
+                    report_text = read_file(temporary_file.name)
 
-    #             st.success(
-    #                 f"Successfully read: {uploaded_file.name}"
-    #             )
+                st.success(
+                    f"Successfully read: {uploaded_file.name}"
+                )
 
-    #         except (ValueError, OSError, RuntimeError) as error:
-    #             st.error(f"Could not read the document: {error}")
-
-    st.write("Selected input method:", input_method)
+            except (ValueError, OSError, RuntimeError) as error:
+                st.error(f"Could not read the document: {error}")
 
 
 # --------------------------------------------------
