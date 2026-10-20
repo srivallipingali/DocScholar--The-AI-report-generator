@@ -242,9 +242,10 @@ report_text = ""
 
 with st.container(border=True):
 
-    input_method = st.radio(
-    "Enter your choice of input method",
-    ["Type or paste text", "Upload a PDF or DOCX"],
+    input_method = st.selectbox(
+        "Enter your choice of input method",
+        ["Type or paste text", "Upload a PDF or DOCX"],
+        index=0,
     )
 
     if input_method == "Type or paste text":
