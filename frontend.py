@@ -44,11 +44,54 @@ st.markdown(
     color: #360314;
     }
 
+    /* Dark text boxes with readable white text */
     .stApp input,
-    .stApp textarea,
-    .stApp [data-baseweb="select"] {
-        color: #360314;
-        background-color: #ffffff;
+    .stApp textarea {
+        color: #ffffff !important;
+        background-color: #24121d !important;
+        border: 1px solid #b85c7d !important;
+        caret-color: #ffffff;
+    }
+
+    .stApp input::placeholder,
+    .stApp textarea::placeholder {
+        color: #d7c3cd !important;
+        opacity: 1;
+    }
+
+    /* Keep selected values and dropdown menus dark with white text */
+    .stApp [data-baseweb="select"] > div {
+        color: #ffffff !important;
+        background-color: #24121d !important;
+        border-color: #b85c7d !important;
+    }
+
+    .stApp [role="listbox"],
+    .stApp [role="option"] {
+        color: #ffffff !important;
+        background-color: #24121d !important;
+    }
+
+    /* Uploaded filename and file-uploader text */
+    .stApp [data-testid="stFileUploader"],
+    .stApp [data-testid="stFileUploader"] label,
+    .stApp [data-testid="stFileUploader"] small,
+    .stApp [data-testid="stFileUploader"] span,
+    .stApp [data-testid="stFileUploader"] p {
+        color: #ffffff !important;
+    }
+
+    .stApp [data-testid="stFileUploader"] section,
+    .stApp [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzone"] {
+        background-color: #24121d !important;
+        border-color: #b85c7d !important;
+    }
+
+    /* File uploader buttons should remain readable */
+    .stApp [data-testid="stFileUploader"] button {
+        color: #ffffff !important;
+        background-color: #480870 !important;
+        border-color: #b85c7d !important;
     }
 
         .block-container {
