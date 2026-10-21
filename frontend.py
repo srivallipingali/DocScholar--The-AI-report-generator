@@ -6,8 +6,9 @@ import base64
 import streamlit as st
 
 from report_generator.config_loader import load_config
-from report_generator.document_builder import build_report
+from report_generator.document_builder import build_structured_report
 from report_generator.file_reader import read_file
+from report_generator.gemini_generator import generate_report_outline
 from report_generator.template_loader import load_templates
 
 
@@ -386,42 +387,58 @@ if st.button(
         st.error("Please enter a title for your report.")
 
     else:
+        api_key = st.secrets.get("GEMINI_API_KEY", "")
 
-        try:
-            config = load_config(CONFIG_PATH)
-
-            # Apply the selected template's formatting.
-            config.update(templates[selected_template])
-
-            # Use the title entered by the user.
-            config["report_title"] = report_title.strip()
-
-            # Generate the document in memory.
-            document_bytes = BytesIO()
-
-            build_report(
-                report_text,
-                config,
-                document_bytes,
+        if not api_key:
+            st.error(
+                "Gemini API key not found. Add GEMINI_API_KEY to "
+                ".streamlit/secrets.toml and restart the app."
             )
+        else:
+            try:
+                config = load_config(CONFIG_PATH)
 
-            st.session_state["generated_report_bytes"] = (
-                document_bytes.getvalue()
-            )
+                # Apply the selected template's formatting.
+                config.update(templates[selected_template])
+                config["report_title"] = report_title.strip()
 
-            st.session_state["generated_report_name"] = (
-                report_title.strip()
-                .replace("/", "-")
-                .replace("\\", "-")
-                + ".docx"
-            )
+                # Ask Gemini to organize the source into report sections.
+                with st.spinner("Gemini is organizing your report. Please wait..."):
+                    outline = generate_report_outline(
+                        source_text=report_text,
+                        report_title=report_title.strip(),
+                        template_name=selected_template,
+                        api_key=api_key,
+                    )
 
-            st.session_state["generated_template"] = selected_template
+                # Convert the AI-generated sections into a Word document.
+                document_bytes = BytesIO()
+                build_structured_report(
+                    outline,
+                    config,
+                    document_bytes,
+                )
 
-            st.success("Your report has been generated successfully!")
+                st.session_state["generated_report_bytes"] = (
+                    document_bytes.getvalue()
+                )
+                st.session_state["generated_report_name"] = (
+                    report_title.strip()
+                    .replace("/", "-")
+                    .replace("\\", "-")
+                    + ".docx"
+                )
+                st.session_state["generated_template"] = selected_template
+                st.success("Your AI-generated report is ready to download!")
 
-        except (FileNotFoundError, ValueError, OSError, RuntimeError) as error:
-            st.error(f"Report generation failed: {error}")
+            except (FileNotFoundError, ValueError, OSError, RuntimeError) as error:
+                st.error(f"Report generation failed: {error}")
+            except Exception as error:
+                # Show the exception type and message without exposing secrets.
+                st.error(
+                    f"Gemini could not generate the report "
+                    f"({type(error).__name__}): {error}"
+                )
 
 
 # --------------------------------------------------
