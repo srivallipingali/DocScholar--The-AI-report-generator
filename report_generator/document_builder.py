@@ -2,7 +2,60 @@
 from pathlib import Path
 
 from docx import Document
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 from docx.shared import Inches, Pt
+
+
+def _add_word_field(paragraph, instruction, displayed_text=""):
+    """Add a Word field that can be recalculated when the document is opened."""
+    begin = OxmlElement("w:fldChar")
+    begin.set(qn("w:fldCharType"), "begin")
+    paragraph._p.append(begin)
+
+    field_instruction = OxmlElement("w:instrText")
+    field_instruction.set(qn("xml:space"), "preserve")
+    field_instruction.text = f" {instruction} "
+    paragraph._p.append(field_instruction)
+
+    separator = OxmlElement("w:fldChar")
+    separator.set(qn("w:fldCharType"), "separate")
+    paragraph._p.append(separator)
+
+    if displayed_text:
+        paragraph.add_run(displayed_text)
+
+    end = OxmlElement("w:fldChar")
+    end.set(qn("w:fldCharType"), "end")
+    paragraph._p.append(end)
+
+
+def _add_table_of_contents(document):
+    document.add_paragraph("Table of Contents", style="Title")
+    document.add_paragraph(
+        "Update this table in Word or LibreOffice if entries or page numbers "
+        "are not populated."
+    )
+    toc_paragraph = document.add_paragraph()
+    _add_word_field(
+        toc_paragraph,
+        r'TOC \o "1-2" \h \z \u',
+        "Update this field to populate the table of contents.",
+    )
+    document.add_page_break()
+
+
+def _add_page_numbers(document):
+    for section in document.sections:
+        footer = section.footer.paragraphs[0]
+        footer.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        footer.add_run("Page ")
+        _add_word_field(footer, "PAGE", "1")
+
+    update_fields = OxmlElement("w:updateFields")
+    update_fields.set(qn("w:val"), "true")
+    document.settings.element.append(update_fields)
 
 
 def build_report(text, config, output_path):
@@ -60,12 +113,15 @@ def build_report(text, config, output_path):
         style="Title"
     )
 
-    # 8. Use the first line of the supplied text as a heading.
+    _add_table_of_contents(document)
+    _add_page_numbers(document)
+
+    # Use the first line of the supplied text as the first numbered heading.
     lines = text.strip().splitlines()
     source_title = lines[0].strip()
 
     document.add_heading(
-        source_title,
+        f"1. {source_title}",
         level=1
     )
 
@@ -134,7 +190,10 @@ def build_structured_report(outline, config, output_path):
 
     report_title = str(outline.get("title") or config["report_title"]).strip()
     document.add_paragraph(report_title, style="Title")
+    _add_table_of_contents(document)
+    _add_page_numbers(document)
 
+    section_number = 0
     for section_data in outline["sections"]:
         if not isinstance(section_data, dict):
             continue
@@ -143,7 +202,8 @@ def build_structured_report(outline, config, output_path):
         content = str(section_data.get("content") or "").strip()
 
         if heading:
-            document.add_heading(heading, level=1)
+            section_number += 1
+            document.add_heading(f"{section_number}. {heading}", level=1)
 
         if content:
             for paragraph in content.split("\n\n"):
@@ -153,13 +213,18 @@ def build_structured_report(outline, config, output_path):
 
         subsections = section_data.get("subsections", [])
         if isinstance(subsections, list):
+            subsection_number = 0
             for subsection in subsections:
                 if not isinstance(subsection, dict):
                     continue
                 subheading = str(subsection.get("heading") or "").strip()
                 subcontent = str(subsection.get("content") or "").strip()
                 if subheading:
-                    document.add_heading(subheading, level=2)
+                    subsection_number += 1
+                    document.add_heading(
+                        f"{section_number or 1}.{subsection_number} {subheading}",
+                        level=2,
+                    )
                 if subcontent:
                     for paragraph in subcontent.split("\n\n"):
                         paragraph = paragraph.strip()
@@ -168,7 +233,8 @@ def build_structured_report(outline, config, output_path):
 
     references = outline.get("references", [])
     if isinstance(references, list) and references:
-        document.add_heading("References", level=1)
+        section_number += 1
+        document.add_heading(f"{section_number}. References", level=1)
         for reference in references:
             if isinstance(reference, dict):
                 reference_text = str(
@@ -186,4 +252,3 @@ def build_structured_report(outline, config, output_path):
     if isinstance(output_path, (str, Path)):
         return Path(output_path)
     return output_path
-

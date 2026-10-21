@@ -374,6 +374,11 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+st.caption(
+    "Reports include a table of contents and page numbers. Word or "
+    "LibreOffice may need to refresh the table when you open the document."
+)
+
 if st.button(
     "Generate Word Report  →",
     type="primary",
