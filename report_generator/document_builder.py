@@ -93,3 +93,97 @@ def build_report(text, config, output_path):
 
     return output_path
 
+
+def build_structured_report(outline, config, output_path):
+    """Build a formatted Word report from Gemini's structured outline."""
+    if not isinstance(outline, dict) or not isinstance(outline.get("sections"), list):
+        raise ValueError("The AI report outline has an invalid format.")
+
+    if isinstance(output_path, (str, Path)):
+        output_path = Path(output_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    document = Document()
+    margins = config["margins"]
+
+    for section in document.sections:
+        section.top_margin = Inches(margins["top"])
+        section.bottom_margin = Inches(margins["bottom"])
+        section.left_margin = Inches(margins["left"])
+        section.right_margin = Inches(margins["right"])
+
+    font_name = config["font_name"]
+    normal_style = document.styles["Normal"]
+    normal_style.font.name = font_name
+    normal_style.font.size = Pt(config["font_size"])
+
+    title_style = document.styles["Title"]
+    title_style.font.name = font_name
+    title_style.font.size = Pt(config.get("title_font_size", 18))
+    title_style.font.bold = True
+
+    heading_style = document.styles["Heading 1"]
+    heading_style.font.name = font_name
+    heading_style.font.size = Pt(config.get("heading_font_size", 14))
+    heading_style.font.bold = True
+
+    heading_two_style = document.styles["Heading 2"]
+    heading_two_style.font.name = font_name
+    heading_two_style.font.size = Pt(config.get("subheading_font_size", 12))
+    heading_two_style.font.bold = True
+
+    report_title = str(outline.get("title") or config["report_title"]).strip()
+    document.add_paragraph(report_title, style="Title")
+
+    for section_data in outline["sections"]:
+        if not isinstance(section_data, dict):
+            continue
+
+        heading = str(section_data.get("heading") or "").strip()
+        content = str(section_data.get("content") or "").strip()
+
+        if heading:
+            document.add_heading(heading, level=1)
+
+        if content:
+            for paragraph in content.split("\\n\\n"):
+                paragraph = paragraph.strip()
+                if paragraph:
+                    document.add_paragraph(paragraph)
+
+        subsections = section_data.get("subsections", [])
+        if isinstance(subsections, list):
+            for subsection in subsections:
+                if not isinstance(subsection, dict):
+                    continue
+                subheading = str(subsection.get("heading") or "").strip()
+                subcontent = str(subsection.get("content") or "").strip()
+                if subheading:
+                    document.add_heading(subheading, level=2)
+                if subcontent:
+                    for paragraph in subcontent.split("\\n\\n"):
+                        paragraph = paragraph.strip()
+                        if paragraph:
+                            document.add_paragraph(paragraph)
+
+    references = outline.get("references", [])
+    if isinstance(references, list) and references:
+        document.add_heading("References", level=1)
+        for reference in references:
+            if isinstance(reference, dict):
+                reference_text = str(
+                    reference.get("text")
+                    or reference.get("title")
+                    or reference.get("url")
+                    or ""
+                ).strip()
+            else:
+                reference_text = str(reference).strip()
+            if reference_text:
+                document.add_paragraph(reference_text, style="List Number")
+
+    document.save(output_path)
+    if isinstance(output_path, (str, Path)):
+        return Path(output_path)
+    return output_path
+
