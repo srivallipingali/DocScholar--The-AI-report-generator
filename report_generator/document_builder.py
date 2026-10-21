@@ -146,7 +146,7 @@ def build_structured_report(outline, config, output_path):
             document.add_heading(heading, level=1)
 
         if content:
-            for paragraph in content.split("\\n\\n"):
+            for paragraph in content.split("\n\n"):
                 paragraph = paragraph.strip()
                 if paragraph:
                     document.add_paragraph(paragraph)
@@ -161,7 +161,7 @@ def build_structured_report(outline, config, output_path):
                 if subheading:
                     document.add_heading(subheading, level=2)
                 if subcontent:
-                    for paragraph in subcontent.split("\\n\\n"):
+                    for paragraph in subcontent.split("\n\n"):
                         paragraph = paragraph.strip()
                         if paragraph:
                             document.add_paragraph(paragraph)
