@@ -161,25 +161,62 @@ st.markdown(
             border-color: #360314;
         }
 
-        div.stButton > button[kind="primary"] {
-            background-color: #480870;
-            color: white;
-            border-radius: 9px;
-            border: none;
-            min-height: 3rem;
-            font-weight: 600;
-        }
-
-        div.stButton > button[kind="primary"]:hover {
-            background-color: #690442;
-            color: #2e7d8c;
-        }
-
+        div.stButton > button[kind="primary"],
+        div.stDownloadButton > button,
         div[data-testid="stDownloadButton"] button {
-            border-radius: 9px;
-            min-height: 2.8rem;
-            font-weight: 600;
+            background-color: #480870 !important;
+            color: white !important;
+            border-radius: 9px !important;
+            border: none !important;
+            min-height: 3rem !important;
+            font-weight: 600 !important;
         }
+
+        div.stButton > button[kind="primary"]:hover,
+        div.stDownloadButton > button:hover,
+        div[data-testid="stDownloadButton"] button:hover {
+            background-color: #690442 !important;
+            color: white !important;
+        }
+
+        div.stButton > button[kind="primary"]:active,
+        div.stDownloadButton > button:active,
+        div[data-testid="stDownloadButton"] button:active {
+            background-color: #360314 !important;
+            color: white !important;
+        }
+
+        div.stButton > button[kind="secondary"] {
+            background-color: white !important;
+            color: #480870 !important;
+            border: 2px solid #480870 !important;
+            border-radius: 9px !important;
+            min-height: 3rem !important;
+            font-weight: 600 !important;
+            opacity: 1 !important;
+        }
+
+        div.stButton > button[kind="secondary"]:active {
+            background-color: #f3eafa !important;
+            color: #480870 !important;
+            border-color: #480870 !important;
+        }
+
+        div.stButton > button[kind="secondary"]:hover {
+            background-color: white !important;
+            color: #690442 !important;
+            border-color: #690442 !important;
+        }
+
+        div[data-testid="stExpander"] summary:hover {
+            background-color: #f3eafa !important;
+            color: #480870 !important;
+        }
+
+        div[data-testid="stExpander"] summary:hover * {
+            color: #480870 !important;
+        }
+
 
         footer {
             visibility: hidden;
@@ -437,7 +474,6 @@ with st.container(border=True):
             )
         )
         selection_label = "Selected" if selected else "Use this template"
-        selection_type = "primary" if selected else "secondary"
 
         with template_columns[index % len(template_columns)]:
             st.markdown(
@@ -504,7 +540,7 @@ with st.container(border=True):
             if st.button(
                 selection_label,
                 key=f"select_template_{index}",
-                type=selection_type,
+                type="secondary" if selected else "primary",
                 use_container_width=True,
                 disabled=selected,
             ):
@@ -600,7 +636,7 @@ st.markdown(
 )
 
 if st.button(
-    "Generate Word Report  →",
+    "Generate Word Report  ",
     type="primary",
     use_container_width=True,
 ):
@@ -695,7 +731,7 @@ if "generated_report_bytes" in st.session_state:
     )
 
     st.download_button(
-        label="⬇️ Download Word Report",
+        label=" Download Word Report",
         data=st.session_state["generated_report_bytes"],
         file_name=st.session_state["generated_report_name"],
         mime=(
