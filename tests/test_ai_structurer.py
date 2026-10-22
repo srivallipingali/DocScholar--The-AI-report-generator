@@ -3,7 +3,9 @@ import json
 import pytest
 
 from report_generator.ai_structurer import (
+    LENGTH_OPTIONS,
     MAX_INPUT_CHARACTERS,
+    TONE_OPTIONS,
     build_prompt,
     parse_report,
     structure_report,
@@ -115,3 +117,42 @@ def test_missing_api_key_gives_clear_error(monkeypatch):
 
     with pytest.raises(RuntimeError, match="GEMINI_API_KEY"):
         structure_report("some text")
+
+
+# ---------- length and tone ----------
+
+@pytest.mark.parametrize("length", list(LENGTH_OPTIONS))
+def test_prompt_includes_each_length_instruction(length):
+    prompt = build_prompt("text", length=length)
+
+    assert LENGTH_OPTIONS[length] in prompt
+
+
+@pytest.mark.parametrize("tone", list(TONE_OPTIONS))
+def test_prompt_includes_each_tone_instruction(tone):
+    prompt = build_prompt("text", tone=tone)
+
+    assert TONE_OPTIONS[tone] in prompt
+
+
+def test_unknown_length_is_rejected():
+    with pytest.raises(ValueError, match="Unknown length"):
+        build_prompt("text", length="Enormous")
+
+
+def test_unknown_tone_is_rejected():
+    with pytest.raises(ValueError, match="Unknown tone"):
+        build_prompt("text", tone="Sarcastic")
+
+
+def test_structure_report_passes_length_and_tone_to_prompt():
+    seen = {}
+
+    def spy(prompt):
+        seen["prompt"] = prompt
+        return VALID_REPLY
+
+    structure_report("text", generate=spy, length="Short", tone="Simple")
+
+    assert LENGTH_OPTIONS["Short"] in seen["prompt"]
+    assert TONE_OPTIONS["Simple"] in seen["prompt"]

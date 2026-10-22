@@ -29,8 +29,55 @@ DEFAULT_MODEL = "gemini-3.8-flash"
 MAX_INPUT_CHARACTERS = 60_000
 
 
-def build_prompt(source_text, report_type=None):
+# The choices offered to the user, and the instruction each one adds to the
+# prompt. Keeping them in dictionaries means the UI can build its dropdowns
+# from the same list (list(LENGTH_OPTIONS)), so the two never drift apart.
+LENGTH_OPTIONS = {
+    "Short": (
+        "Keep the report brief: about 3 sections of one short paragraph each, "
+        "covering only the key points."
+    ),
+    "Medium": (
+        "Make the report a moderate length: about 4 to 6 sections of one or "
+        "two paragraphs each."
+    ),
+    "Detailed": (
+        "Make the report thorough: about 6 to 9 sections of two or three "
+        "paragraphs each. Explain and connect the ideas fully, but still use "
+        "only what the source material supports."
+    ),
+}
+
+TONE_OPTIONS = {
+    "Formal": "Write in a formal, academic tone.",
+    "Simple": "Write in plain, easy-to-read language for a general audience.",
+    "Technical": (
+        "Write in a precise technical tone, using the correct terminology "
+        "from the source material."
+    ),
+}
+
+DEFAULT_LENGTH = "Medium"
+DEFAULT_TONE = "Formal"
+
+
+def build_prompt(
+    source_text,
+    report_type=None,
+    length=DEFAULT_LENGTH,
+    tone=DEFAULT_TONE,
+):
     """Create the instruction that tells the model what to produce."""
+
+    if length not in LENGTH_OPTIONS:
+        raise ValueError(
+            f"Unknown length '{length}'. Choose from: {', '.join(LENGTH_OPTIONS)}."
+        )
+
+    if tone not in TONE_OPTIONS:
+        raise ValueError(
+            f"Unknown tone '{tone}'. Choose from: {', '.join(TONE_OPTIONS)}."
+        )
 
     focus = f" The report should follow a {report_type} style." if report_type else ""
 
@@ -43,8 +90,10 @@ def build_prompt(source_text, report_type=None):
         "Rules:\n"
         "- Use only information from the source material. Do not invent "
         "facts, figures or citations.\n"
-        "- Write in complete, formal paragraphs. Separate paragraphs with a "
-        "blank line.\n"
+        f"- {TONE_OPTIONS[tone]}\n"
+        f"- {LENGTH_OPTIONS[length]}\n"
+        "- Write in complete paragraphs. Separate paragraphs with a blank "
+        "line.\n"
         "- Keep each heading short.\n\n"
         "SOURCE MATERIAL:\n"
         f"{source_text}"
@@ -113,7 +162,13 @@ def _call_gemini(prompt):
     return response.text
 
 
-def structure_report(source_text, report_type=None, generate=None):
+def structure_report(
+    source_text,
+    report_type=None,
+    generate=None,
+    length=DEFAULT_LENGTH,
+    tone=DEFAULT_TONE,
+):
     """Convert raw text into a validated StructuredReport.
 
     `generate` is a function that takes a prompt string and returns the
@@ -132,7 +187,7 @@ def structure_report(source_text, report_type=None, generate=None):
     if generate is None:
         generate = _call_gemini
 
-    prompt = build_prompt(source_text.strip(), report_type)
+    prompt = build_prompt(source_text.strip(), report_type, length, tone)
     reply = generate(prompt)
 
     return parse_report(reply)

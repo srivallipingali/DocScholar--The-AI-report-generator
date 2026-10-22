@@ -5,7 +5,13 @@ import base64
 
 import streamlit as st
 
-from report_generator.ai_structurer import structure_report
+from report_generator.ai_structurer import (
+    DEFAULT_LENGTH,
+    DEFAULT_TONE,
+    LENGTH_OPTIONS,
+    TONE_OPTIONS,
+    structure_report,
+)
 from report_generator.config_loader import load_config
 from report_generator.document_builder import (
     build_report,
@@ -334,6 +340,25 @@ with st.container(border=True):
         ),
     )
 
+    if use_ai:
+        length_column, tone_column = st.columns(2)
+
+        with length_column:
+            report_length = st.selectbox(
+                "Report length",
+                options=list(LENGTH_OPTIONS),
+                index=list(LENGTH_OPTIONS).index(DEFAULT_LENGTH),
+            )
+
+        with tone_column:
+            report_tone = st.selectbox(
+                "Tone",
+                options=list(TONE_OPTIONS),
+                index=list(TONE_OPTIONS).index(DEFAULT_TONE),
+            )
+    else:
+        report_length, report_tone = DEFAULT_LENGTH, DEFAULT_TONE
+
     report_title = st.text_input(
         "Report title" + (" (optional with AI)" if use_ai else ""),
         placeholder="e.g. Renewable Energy: A Technical Overview",
@@ -427,6 +452,8 @@ if st.button(
                     structured_report = structure_report(
                         report_text,
                         report_type=selected_template,
+                        length=report_length,
+                        tone=report_tone,
                     )
 
                 build_structured_report(
