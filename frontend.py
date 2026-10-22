@@ -384,6 +384,10 @@ with st.container(border=True):
         )
 
     template_descriptions = {
+        "Modern Blue": "A polished blue-accented design for technical and engineering reports.",
+        "Rose Editorial": "An editorial-inspired style for academic and research reports.",
+        "Emerald Professional": "A clean green-accented layout for business and analytical reports.",
+        "Warm Classic": "A warm, classic style for formal submissions and portfolios.",
         "Academic Report": (
             "Suitable for academic assignments, research summaries, "
             "and college reports."
@@ -415,6 +419,9 @@ with st.container(border=True):
         settings = templates[template_name]
         selected = st.session_state["selected_template"] == template_name
         font_name = escape(str(settings["font_name"]), quote=True)
+        accent = escape(str(settings.get("accent_color", "#480870")), quote=True)
+        accent_light = escape(str(settings.get("accent_light", "#F3EDF7")), quote=True)
+        text_color = escape(str(settings.get("text_color", "#29232A")), quote=True)
         title_size = settings["title_font_size"]
         heading_size = settings["heading_font_size"]
         body_size = settings["font_size"]
@@ -437,14 +444,14 @@ with st.container(border=True):
                 f"""
                 <div style="
                     background: white;
-                    border: 2px solid {'#480870' if selected else '#e2d5df'};
+                    border: 2px solid {accent if selected else '#e2d5df'};
                     border-radius: 14px;
                     padding: 16px;
                     margin-bottom: 8px;
                 ">
                     <div style="
-                        background: #faf8fb;
-                        border: 1px solid #eee7f0;
+                        background: {accent_light};
+                        border: 1px solid {accent};
                         border-radius: 5px;
                         box-sizing: border-box;
                         height: 155px;
@@ -452,16 +459,20 @@ with st.container(border=True):
                         overflow: hidden;
                         padding: {page_margin}px;
                         width: 78%;
-                        color: #29232a;
+                        color: {text_color};
                         font-family: '{font_name}', serif;
                     ">
                         <div style="
+                            color: {accent};
+                            border-bottom: 3px solid {accent};
+                            padding-bottom: 5px;
                             font-size: {title_size}px;
                             font-weight: bold;
                             line-height: 1.15;
                             margin-bottom: 10px;
                         ">Your Report Title</div>
                         <div style="
+                            color: {accent};
                             font-size: {heading_size}px;
                             font-weight: bold;
                             margin-bottom: 5px;
@@ -481,6 +492,7 @@ with st.container(border=True):
                         {description}
                     </div>
                     <div style="color: #604d5b; font-size: 13px;">
+                        <span style="display:inline-block;background:{accent};width:11px;height:11px;border-radius:50%;margin-right:6px;"></span>
                         {font_name} · {body_size} pt body ·
                         {title_size} pt title
                     </div>
@@ -512,7 +524,7 @@ with st.container(border=True):
                         background: white;
                         border: 1px solid #ded6e0;
                         box-shadow: 0 3px 12px #00000012;
-                        color: #29232a;
+                        color: {text_color};
                         font-family: '{font_name}', serif;
                         margin: 0 auto;
                         max-width: 620px;
@@ -523,11 +535,15 @@ with st.container(border=True):
                             {settings['margins']['left']}in;
                     ">
                         <div style="
+                            color: {accent};
+                            border-bottom: 3px solid {accent};
+                            padding-bottom: 10px;
                             font-size: {title_size}px;
                             font-weight: bold;
                             margin-bottom: 22px;
                         ">{preview_title}</div>
                         <div style="
+                            color: {accent};
                             font-size: {heading_size}px;
                             font-weight: bold;
                             margin: 16px 0 8px;
