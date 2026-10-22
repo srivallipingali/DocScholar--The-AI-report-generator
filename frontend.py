@@ -484,7 +484,7 @@ with st.container(border=True):
                         {font_name}.</div>
                     </div>
                     <div style="
-                        color: #360314;
+                        color: {accent};
                         font-size: 18px;
                         font-weight: 700;
                     ">{escaped_name}</div>
@@ -558,6 +558,7 @@ with st.container(border=True):
                             typography and page layout.
                         </div>
                         <div style="
+                            color: {accent};
                             font-size: {heading_size}px;
                             font-weight: bold;
                             margin: 18px 0 8px;
