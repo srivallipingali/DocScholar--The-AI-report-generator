@@ -23,7 +23,6 @@ def test_build_report(tmp_path):
     output_path = tmp_path / "report.docx"
 
     text = (
-        "Renewable Energy\n\n"
         "Renewable energy comes from natural sources.\n\n"
         "Solar panels convert sunlight into electricity."
     )
@@ -43,12 +42,24 @@ def test_build_report(tmp_path):
         paragraph.text for paragraph in document.paragraphs
     ]
 
-    assert "Generated Report" in paragraphs
-    assert "Renewable Energy" in paragraphs
-    assert (
-        "Renewable energy comes from natural sources."
-        in paragraphs
-    )
+    assert paragraphs == [
+        "Generated Report",
+        "Renewable energy comes from natural sources.",
+        "Solar panels convert sunlight into electricity.",
+    ]
+    assert document.paragraphs[1].style.name != "Heading 1"
+
+
+def test_build_report_requires_a_separate_title(tmp_path):
+    config = sample_config()
+    config["report_title"] = ""
+
+    with pytest.raises(ValueError, match="report title is required"):
+        build_report(
+            "First line is report content.",
+            config,
+            tmp_path / "report.docx",
+        )
 
 
 def test_empty_text_is_rejected(tmp_path):

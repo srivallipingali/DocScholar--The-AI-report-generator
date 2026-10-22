@@ -274,47 +274,31 @@ def build_report(text, config, output_path):
     """
     Create a formatted Word report from plain text (no AI involved).
 
-    The first line of the text becomes a heading and the rest becomes
-    paragraphs.
+    The report title comes from the configuration; all input text is report
+    content.
     """
 
     if not text or not text.strip():
         raise ValueError("Cannot generate a report from empty text.")
 
+    title = (config.get("report_title") or "").strip()
+    if not title:
+        raise ValueError("A report title is required.")
+
     output_path = _prepare_output(output_path)
     document = _create_styled_document(config)
 
     include_cover = config.get("include_cover_page", False)
-    include_index = config.get("include_index", False)
 
-    if include_cover or include_index:
+    if include_cover:
         _configure_page_numbering(document)
-
-    lines = text.strip().splitlines()
-    first_line = lines[0].strip()
-    body = "\n".join(lines[1:]).strip()
-
-    title = (config.get("report_title") or "").strip() or first_line
 
     if include_cover:
         _add_cover_page(document, title, config)
     else:
         document.add_paragraph(title, style="Title")
 
-    if include_index:
-        sections_for_index = [first_line]
-        start_page = 3 if include_cover else 2
-        _add_index_page(
-            document,
-            sections_for_index,
-            config,
-            start_page=start_page,
-        )
-
-    document.add_heading(first_line, level=1)
-
-    if body:
-        _add_paragraphs(document, body)
+    _add_paragraphs(document, text.strip())
 
     return _save(document, output_path)
 

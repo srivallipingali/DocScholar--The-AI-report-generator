@@ -2,6 +2,7 @@ from io import BytesIO
 from pathlib import Path
 import tempfile
 import base64
+from html import escape
 
 import streamlit as st
 
@@ -272,14 +273,7 @@ with st.container(border=True):
         report_text = st.text_area(
             "Report content",
             height=260,
-            placeholder=(
-                "Enter Title\n\n"
-                "Press Enter for body text."
-            ),
-        )
-
-        st.caption(
-            "The first line becomes a heading inside your Word document."
+            placeholder="Enter or paste the text for your report.",
         )
 
     else:
@@ -379,7 +373,8 @@ with st.container(border=True):
         include_index = st.checkbox(
             "Table of Contents (Index)",
             value=True,
-            help="Generate an index page listing all report topics.",
+            help="Generate an index page for AI-organised report sections.",
+            disabled=not use_ai,
         )
     with col3:
         section_per_page = st.checkbox(
@@ -387,11 +382,6 @@ with st.container(border=True):
             value=True,
             help="Insert a page break between each topic so each section starts fresh on a new page.",
         )
-
-    selected_template = st.selectbox(
-        "Choose a report template",
-        options=list(templates.keys()),
-    )
 
     template_descriptions = {
         "Academic Report": (
@@ -411,21 +401,169 @@ with st.container(border=True):
         ),
     }
 
-    st.markdown(
-    f"""
-    <p style="
-        color: #360314;
-        font-size: 15px;
-        margin-top: 8px;
-    ">
-        {template_descriptions.get(
-            selected_template,
-            "A predefined formatting style for your report."
-        )}
-    </p>
-    """,
-    unsafe_allow_html=True,
-)
+    template_names = list(templates)
+    if (
+        st.session_state.get("selected_template") not in template_names
+    ):
+        st.session_state["selected_template"] = template_names[0]
+
+    st.markdown("### Choose a report template")
+    st.caption("Select a style or expand its preview to see a sample page.")
+
+    template_columns = st.columns(2)
+    for index, template_name in enumerate(template_names):
+        settings = templates[template_name]
+        selected = st.session_state["selected_template"] == template_name
+        font_name = escape(str(settings["font_name"]), quote=True)
+        title_size = settings["title_font_size"]
+        heading_size = settings["heading_font_size"]
+        body_size = settings["font_size"]
+        page_margin = max(
+            10,
+            min(24, round(settings["margins"]["left"] * 12)),
+        )
+        escaped_name = escape(template_name)
+        description = escape(
+            template_descriptions.get(
+                template_name,
+                "A predefined formatting style for your report.",
+            )
+        )
+        selection_label = "Selected" if selected else "Use this template"
+        selection_type = "primary" if selected else "secondary"
+
+        with template_columns[index % len(template_columns)]:
+            st.markdown(
+                f"""
+                <div style="
+                    background: white;
+                    border: 2px solid {'#480870' if selected else '#e2d5df'};
+                    border-radius: 14px;
+                    padding: 16px;
+                    margin-bottom: 8px;
+                ">
+                    <div style="
+                        background: #faf8fb;
+                        border: 1px solid #eee7f0;
+                        border-radius: 5px;
+                        box-sizing: border-box;
+                        height: 155px;
+                        margin: 0 auto 14px;
+                        overflow: hidden;
+                        padding: {page_margin}px;
+                        width: 78%;
+                        color: #29232a;
+                        font-family: '{font_name}', serif;
+                    ">
+                        <div style="
+                            font-size: {title_size}px;
+                            font-weight: bold;
+                            line-height: 1.15;
+                            margin-bottom: 10px;
+                        ">Your Report Title</div>
+                        <div style="
+                            font-size: {heading_size}px;
+                            font-weight: bold;
+                            margin-bottom: 5px;
+                        ">Section Heading</div>
+                        <div style="
+                            font-size: {body_size}px;
+                            line-height: 1.35;
+                        ">Report text will appear here, formatted in
+                        {font_name}.</div>
+                    </div>
+                    <div style="
+                        color: #360314;
+                        font-size: 18px;
+                        font-weight: 700;
+                    ">{escaped_name}</div>
+                    <div style="color: #604d5b; min-height: 44px;">
+                        {description}
+                    </div>
+                    <div style="color: #604d5b; font-size: 13px;">
+                        {font_name} · {body_size} pt body ·
+                        {title_size} pt title
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            if st.button(
+                selection_label,
+                key=f"select_template_{index}",
+                type=selection_type,
+                use_container_width=True,
+                disabled=selected,
+            ):
+                st.session_state["selected_template"] = template_name
+                st.rerun()
+
+            with st.expander(f"Preview {template_name}"):
+                preview_title = escape(
+                    report_title.strip() or "Your Report Title"
+                )
+                preview_author = escape(
+                    author_name.strip() or "Prepared by: Your Name"
+                )
+                st.markdown(
+                    f"""
+                    <div style="
+                        background: white;
+                        border: 1px solid #ded6e0;
+                        box-shadow: 0 3px 12px #00000012;
+                        color: #29232a;
+                        font-family: '{font_name}', serif;
+                        margin: 0 auto;
+                        max-width: 620px;
+                        min-height: 390px;
+                        padding: {settings['margins']['top']}in
+                            {settings['margins']['right']}in
+                            {settings['margins']['bottom']}in
+                            {settings['margins']['left']}in;
+                    ">
+                        <div style="
+                            font-size: {title_size}px;
+                            font-weight: bold;
+                            margin-bottom: 22px;
+                        ">{preview_title}</div>
+                        <div style="
+                            font-size: {heading_size}px;
+                            font-weight: bold;
+                            margin: 16px 0 8px;
+                        ">Introduction</div>
+                        <div style="
+                            font-size: {body_size}px;
+                            line-height: 1.6;
+                        ">
+                            This is a preview of how your report text will
+                            appear using the {escaped_name} template. Your
+                            selected content and headings will use this
+                            typography and page layout.
+                        </div>
+                        <div style="
+                            font-size: {heading_size}px;
+                            font-weight: bold;
+                            margin: 18px 0 8px;
+                        ">Key Findings</div>
+                        <div style="
+                            font-size: {body_size}px;
+                            line-height: 1.6;
+                        ">Section headings and body paragraphs follow the
+                        same template formatting.</div>
+                        <div style="
+                            border-top: 1px solid #ded6e0;
+                            color: #604d5b;
+                            font-size: 10px;
+                            margin-top: 30px;
+                            padding-top: 8px;
+                        ">{preview_author}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+    selected_template = st.session_state["selected_template"]
 
 
 # --------------------------------------------------
@@ -547,6 +685,7 @@ if "generated_report_bytes" in st.session_state:
             "application/vnd.openxmlformats-officedocument."
             "wordprocessingml.document"
         ),
+        type="primary",
         use_container_width=True,
     )
 
