@@ -5,23 +5,31 @@ from docx import Document
 from docx.shared import Inches, Pt
 
 
-def build_report(text, config, output_path):
-    """
-    Create a formatted Word report using the supplied configuration.
-    """
+def _prepare_output(output_path):
+    """Create the output folder if a file path was given.
 
-    # 1. Validate the input text.
-    if not text or not text.strip():
-        raise ValueError("Cannot generate a report from empty text.")
+    The app passes an in-memory BytesIO instead of a path, so only real
+    paths need a folder.
+    """
 
     if isinstance(output_path, (str, Path)):
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # 2. Create a new Word document.
+    return output_path
+
+
+def _create_styled_document(config):
+    """Create an empty Word document with the template's formatting applied.
+
+    Both build_report (plain text) and build_structured_report (AI sections)
+    start from this, so the look of a template is defined in exactly one
+    place.
+    """
+
     document = Document()
 
-    # 3. Apply page margins.
+    # Page margins.
     margins = config["margins"]
 
     for section in document.sections:
@@ -30,7 +38,7 @@ def build_report(text, config, output_path):
         section.left_margin = Inches(margins["left"])
         section.right_margin = Inches(margins["right"])
 
-    # 4. Apply the default font to normal paragraphs.
+    # Default font for normal paragraphs.
     font_name = config["font_name"]
     font_size = config["font_size"]
 
@@ -38,7 +46,7 @@ def build_report(text, config, output_path):
     normal_style.font.name = font_name
     normal_style.font.size = Pt(font_size)
 
-    # 5. Configure the main report title style.
+    # Main report title style.
     title_style = document.styles["Title"]
     title_style.font.name = font_name
     title_style.font.size = Pt(
@@ -46,7 +54,7 @@ def build_report(text, config, output_path):
     )
     title_style.font.bold = True
 
-    # 6. Configure the section heading style.
+    # Section heading style.
     heading_style = document.styles["Heading 1"]
     heading_style.font.name = font_name
     heading_style.font.size = Pt(
@@ -54,42 +62,89 @@ def build_report(text, config, output_path):
     )
     heading_style.font.bold = True
 
-    # 7. Add the main report title.
+    return document
+
+
+def _add_paragraphs(document, body):
+    """Split body text on blank lines and add each block as a paragraph.
+
+    Line breaks inside a block are joined with spaces so text copied from a
+    PDF (which breaks lines mid-sentence) flows as normal paragraphs.
+    """
+
+    for paragraph in body.split("\n\n"):
+        cleaned_paragraph = " ".join(
+            line.strip()
+            for line in paragraph.splitlines()
+            if line.strip()
+        )
+
+        if cleaned_paragraph:
+            document.add_paragraph(cleaned_paragraph)
+
+
+def _save(document, output_path):
+    """Save the document and return the same path (or BytesIO) it was given."""
+
+    document.save(output_path)
+
+    return output_path
+
+
+def build_report(text, config, output_path):
+    """
+    Create a formatted Word report from plain text (no AI involved).
+
+    The first line of the text becomes a heading and the rest becomes
+    paragraphs.
+    """
+
+    if not text or not text.strip():
+        raise ValueError("Cannot generate a report from empty text.")
+
+    output_path = _prepare_output(output_path)
+    document = _create_styled_document(config)
+
     document.add_paragraph(
         config["report_title"],
         style="Title"
     )
 
-    # 8. Use the first line of the supplied text as a heading.
     lines = text.strip().splitlines()
-    source_title = lines[0].strip()
+    document.add_heading(lines[0].strip(), level=1)
 
-    document.add_heading(
-        source_title,
-        level=1
-    )
-
-    # 9. Add the remaining content as paragraphs.
     body = "\n".join(lines[1:]).strip()
 
     if body:
-        paragraphs = body.split("\n\n")
+        _add_paragraphs(document, body)
 
-        for paragraph in paragraphs:
-            cleaned_paragraph = " ".join(
-                line.strip()
-                for line in paragraph.splitlines()
-                if line.strip()
-            )
+    return _save(document, output_path)
 
-            if cleaned_paragraph:
-                document.add_paragraph(cleaned_paragraph)
 
-    # 10. Save the Word document.
-    document.save(output_path)
+def build_structured_report(report, config, output_path):
+    """
+    Create a formatted Word report from a StructuredReport (the AI path).
 
-    if isinstance(output_path, (str, Path)):
-        return Path(output_path)
+    `report` is a report_schema.StructuredReport: a title plus a list of
+    sections, each with a heading and content. Each section becomes a
+    Heading 1 followed by its paragraphs.
 
-    return output_path
+    config["report_title"], if present and non-empty, overrides the title
+    chosen by the AI, so a title typed by the user always wins.
+    """
 
+    if not report.sections:
+        raise ValueError("Cannot generate a report with no sections.")
+
+    output_path = _prepare_output(output_path)
+    document = _create_styled_document(config)
+
+    title = (config.get("report_title") or "").strip() or report.title
+
+    document.add_paragraph(title, style="Title")
+
+    for section in report.sections:
+        document.add_heading(section.heading, level=1)
+        _add_paragraphs(document, section.content)
+
+    return _save(document, output_path)

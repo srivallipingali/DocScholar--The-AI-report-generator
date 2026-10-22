@@ -58,3 +58,64 @@ def test_empty_text_is_rejected(tmp_path):
             sample_config(),
             tmp_path / "report.docx"
         )
+
+
+# ---------- build_structured_report (the AI path) ----------
+
+from io import BytesIO
+
+from report_generator.document_builder import build_structured_report
+from report_generator.report_schema import Section, StructuredReport
+
+
+def sample_report():
+    return StructuredReport(
+        title="AI Chosen Title",
+        sections=[
+            Section(
+                heading="Introduction",
+                content="First paragraph.\n\nSecond paragraph.",
+            ),
+            Section(heading="Conclusion", content="The end."),
+        ],
+    )
+
+
+def test_structured_report_contains_headings_and_paragraphs(tmp_path):
+    output_path = tmp_path / "structured.docx"
+    config = sample_config()
+    config["report_title"] = ""  # no user title -> AI title is used
+
+    build_structured_report(sample_report(), config, output_path)
+
+    document = Document(output_path)
+    paragraphs = [p.text for p in document.paragraphs]
+
+    assert paragraphs == [
+        "AI Chosen Title",
+        "Introduction",
+        "First paragraph.",
+        "Second paragraph.",
+        "Conclusion",
+        "The end.",
+    ]
+
+
+def test_structured_report_user_title_overrides_ai_title(tmp_path):
+    output_path = tmp_path / "structured.docx"
+
+    build_structured_report(sample_report(), sample_config(), output_path)
+
+    paragraphs = [p.text for p in Document(output_path).paragraphs]
+
+    assert paragraphs[0] == "Generated Report"
+    assert "AI Chosen Title" not in paragraphs
+
+
+def test_structured_report_can_write_to_memory():
+    buffer = BytesIO()
+
+    build_structured_report(sample_report(), sample_config(), buffer)
+
+    buffer.seek(0)
+    assert len(Document(buffer).paragraphs) > 0

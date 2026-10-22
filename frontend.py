@@ -5,10 +5,22 @@ import base64
 
 import streamlit as st
 
+from report_generator.ai_structurer import structure_report
 from report_generator.config_loader import load_config
-from report_generator.document_builder import build_report
+from report_generator.document_builder import (
+    build_report,
+    build_structured_report,
+)
 from report_generator.file_reader import read_file
 from report_generator.template_loader import load_templates
+
+# Load GEMINI_API_KEY from a local .env file if python-dotenv is installed.
+# On a deployed app the key comes from the host's secrets instead.
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 
 # --------------------------------------------------
@@ -312,8 +324,18 @@ st.markdown(
 
 with st.container(border=True):
 
+    use_ai = st.checkbox(
+        "Use AI to organise my content into sections",
+        value=True,
+        help=(
+            "Gemini reads your content and arranges it into a titled report "
+            "with headings. Turn this off to format your text exactly as "
+            "written."
+        ),
+    )
+
     report_title = st.text_input(
-        "Report title",
+        "Report title" + (" (optional with AI)" if use_ai else ""),
         placeholder="e.g. Renewable Energy: A Technical Overview",
     )
 
@@ -382,7 +404,7 @@ if st.button(
     if not report_text.strip():
         st.error("Please enter some text or upload a readable document.")
 
-    elif not report_title.strip():
+    elif not use_ai and not report_title.strip():
         st.error("Please enter a title for your report.")
 
     else:
@@ -393,24 +415,45 @@ if st.button(
             # Apply the selected template's formatting.
             config.update(templates[selected_template])
 
-            # Use the title entered by the user.
+            # Use the title entered by the user (may be empty when using AI,
+            # in which case the AI's suggested title is used instead).
             config["report_title"] = report_title.strip()
 
             # Generate the document in memory.
             document_bytes = BytesIO()
 
-            build_report(
-                report_text,
-                config,
-                document_bytes,
-            )
+            if use_ai:
+                with st.spinner("Organising your content with AI..."):
+                    structured_report = structure_report(
+                        report_text,
+                        report_type=selected_template,
+                    )
+
+                build_structured_report(
+                    structured_report,
+                    config,
+                    document_bytes,
+                )
+
+                final_title = (
+                    report_title.strip() or structured_report.title
+                )
+
+            else:
+                build_report(
+                    report_text,
+                    config,
+                    document_bytes,
+                )
+
+                final_title = report_title.strip()
 
             st.session_state["generated_report_bytes"] = (
                 document_bytes.getvalue()
             )
 
             st.session_state["generated_report_name"] = (
-                report_title.strip()
+                final_title
                 .replace("/", "-")
                 .replace("\\", "-")
                 + ".docx"
