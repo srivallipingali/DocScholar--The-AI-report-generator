@@ -2,7 +2,14 @@
 from pathlib import Path
 
 from docx import Document
+from docx.oxml.ns import qn
 from docx.shared import Inches, Pt
+
+from report_generator.docx_fields import (
+    add_page_number_footer,
+    add_table_of_contents,
+    enable_update_fields_on_open,
+)
 
 
 def _prepare_output(output_path):
@@ -17,6 +24,26 @@ def _prepare_output(output_path):
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
     return output_path
+
+
+def _set_font(style, font_name):
+    """Set a style's font, overriding Word's built-in theme font.
+
+    Styles like Title and Heading 1 point at the document's *theme* font
+    (via asciiTheme etc.). Those theme attributes win over a plain font
+    name, so just writing style.font.name leaves the heading in the theme
+    font (Calibri-like). We set the name and then delete the theme
+    attributes so the chosen font is actually used.
+    """
+
+    style.font.name = font_name
+
+    fonts = style.element.rPr.rFonts
+    fonts.set(qn("w:eastAsia"), font_name)
+
+    for attribute in ("w:asciiTheme", "w:hAnsiTheme", "w:eastAsiaTheme", "w:cstheme"):
+        if fonts.get(qn(attribute)) is not None:
+            del fonts.attrib[qn(attribute)]
 
 
 def _create_styled_document(config):
@@ -43,12 +70,12 @@ def _create_styled_document(config):
     font_size = config["font_size"]
 
     normal_style = document.styles["Normal"]
-    normal_style.font.name = font_name
+    _set_font(normal_style, font_name)
     normal_style.font.size = Pt(font_size)
 
     # Main report title style.
     title_style = document.styles["Title"]
-    title_style.font.name = font_name
+    _set_font(title_style, font_name)
     title_style.font.size = Pt(
         config.get("title_font_size", 18)
     )
@@ -56,7 +83,7 @@ def _create_styled_document(config):
 
     # Section heading style.
     heading_style = document.styles["Heading 1"]
-    heading_style.font.name = font_name
+    _set_font(heading_style, font_name)
     heading_style.font.size = Pt(
         config.get("heading_font_size", 14)
     )
@@ -121,7 +148,13 @@ def build_report(text, config, output_path):
     return _save(document, output_path)
 
 
-def build_structured_report(report, config, output_path):
+def build_structured_report(
+    report,
+    config,
+    output_path,
+    include_toc=False,
+    page_numbers=False,
+):
     """
     Create a formatted Word report from a StructuredReport (the AI path).
 
@@ -131,6 +164,10 @@ def build_structured_report(report, config, output_path):
 
     config["report_title"], if present and non-empty, overrides the title
     chosen by the AI, so a title typed by the user always wins.
+
+    include_toc:  add a table of contents (and ask Word to fill in its page
+                  numbers when the file is opened).
+    page_numbers: add "Page N" to the footer of every page.
     """
 
     if not report.sections:
@@ -142,6 +179,17 @@ def build_structured_report(report, config, output_path):
     title = (config.get("report_title") or "").strip() or report.title
 
     document.add_paragraph(title, style="Title")
+
+    if include_toc:
+        add_table_of_contents(
+            document,
+            [section.heading for section in report.sections],
+            heading_size=config.get("heading_font_size", 14),
+        )
+        enable_update_fields_on_open(document)
+
+    if page_numbers:
+        add_page_number_footer(document)
 
     for section in report.sections:
         document.add_heading(section.heading, level=1)

@@ -359,6 +359,23 @@ with st.container(border=True):
     else:
         report_length, report_tone = DEFAULT_LENGTH, DEFAULT_TONE
 
+    if use_ai:
+        toc_column, pages_column = st.columns(2)
+
+        with toc_column:
+            include_toc = st.checkbox(
+                "Add a table of contents",
+                help=(
+                    "In Word you may be asked to update fields when opening. "
+                    "Choose Yes to fill in the page numbers."
+                ),
+            )
+
+        with pages_column:
+            page_numbers = st.checkbox("Add page numbers", value=True)
+    else:
+        include_toc, page_numbers = False, False
+
     report_title = st.text_input(
         "Report title" + (" (optional with AI)" if use_ai else ""),
         placeholder="e.g. Renewable Energy: A Technical Overview",
@@ -460,6 +477,8 @@ if st.button(
                     structured_report,
                     config,
                     document_bytes,
+                    include_toc=include_toc,
+                    page_numbers=page_numbers,
                 )
 
                 final_title = (
