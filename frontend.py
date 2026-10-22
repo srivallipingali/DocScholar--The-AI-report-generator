@@ -18,6 +18,7 @@ from report_generator.document_builder import (
     build_structured_report,
 )
 from report_generator.file_reader import read_file
+from report_generator.pdf_export import docx_to_pdf_bytes, is_pdf_export_available
 from report_generator.template_loader import load_templates
 
 # Load GEMINI_API_KEY from a local .env file if python-dotenv is installed.
@@ -376,6 +377,17 @@ with st.container(border=True):
     else:
         include_toc, page_numbers = False, False
 
+    pdf_available = is_pdf_export_available()
+
+    if pdf_available:
+        also_pdf = st.checkbox("Also create a PDF version")
+    else:
+        also_pdf = False
+        st.caption(
+            "PDF export is unavailable because LibreOffice is not installed "
+            "on this computer."
+        )
+
     report_title = st.text_input(
         "Report title" + (" (optional with AI)" if use_ai else ""),
         placeholder="e.g. Renewable Energy: A Technical Overview",
@@ -498,6 +510,16 @@ if st.button(
                 document_bytes.getvalue()
             )
 
+            # Remove any PDF left over from a previous run, then make a new
+            # one if the user asked for it.
+            st.session_state.pop("generated_pdf_bytes", None)
+
+            if also_pdf:
+                with st.spinner("Creating the PDF..."):
+                    st.session_state["generated_pdf_bytes"] = (
+                        docx_to_pdf_bytes(document_bytes.getvalue())
+                    )
+
             st.session_state["generated_report_name"] = (
                 final_title
                 .replace("/", "-")
@@ -540,6 +562,17 @@ if "generated_report_bytes" in st.session_state:
         ),
         use_container_width=True,
     )
+
+    if "generated_pdf_bytes" in st.session_state:
+        st.download_button(
+            label="⬇️ Download PDF Report",
+            data=st.session_state["generated_pdf_bytes"],
+            file_name=(
+                Path(st.session_state["generated_report_name"]).stem + ".pdf"
+            ),
+            mime="application/pdf",
+            use_container_width=True,
+        )
 
 
 # --------------------------------------------------
