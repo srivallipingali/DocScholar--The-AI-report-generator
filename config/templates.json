@@ -1,51 +1,114 @@
-
 {
-    "Academic Report": {
-        "font_name": "Times New Roman",
-        "font_size": 12,
-        "title_font_size": 18,
-        "heading_font_size": 14,
-        "margins": {
-            "top": 1.0,
-            "bottom": 1.0,
-            "left": 1.0,
-            "right": 1.0
-        }
-    },
-    "Engineering Project Report": {
-        "font_name": "Times New Roman",
-        "font_size": 12,
-        "title_font_size": 18,
-        "heading_font_size": 14,
-        "margins": {
-            "top": 0.8,
-            "bottom": 0.8,
-            "left": 1.25,
-            "right": 1.0
-        }
-    },
-    "Business Report": {
-        "font_name": "Arial",
-        "font_size": 11,
-        "title_font_size": 20,
-        "heading_font_size": 14,
-        "margins": {
-            "top": 0.75,
-            "bottom": 0.75,
-            "left": 0.8,
-            "right": 0.8
-        }
-    },
-    "Simple Structured Report": {
-        "font_name": "Calibri",
-        "font_size": 11,
-        "title_font_size": 16,
-        "heading_font_size": 13,
-        "margins": {
-            "top": 1.0,
-            "bottom": 1.0,
-            "left": 1.0,
-            "right": 1.0
-        }
+  "Academic Report": {
+    "font_name": "Times New Roman",
+    "font_size": 12,
+    "title_font_size": 18,
+    "heading_font_size": 14,
+    "margins": {
+      "top": 1,
+      "bottom": 1,
+      "left": 1,
+      "right": 1
     }
+  },
+  "Engineering Project Report": {
+    "font_name": "Times New Roman",
+    "font_size": 12,
+    "title_font_size": 18,
+    "heading_font_size": 14,
+    "margins": {
+      "top": 0.8,
+      "bottom": 0.8,
+      "left": 1.25,
+      "right": 1
+    }
+  },
+  "Business Report": {
+    "font_name": "Arial",
+    "font_size": 11,
+    "title_font_size": 20,
+    "heading_font_size": 14,
+    "margins": {
+      "top": 0.75,
+      "bottom": 0.75,
+      "left": 0.8,
+      "right": 0.8
+    }
+  },
+  "Simple Structured Report": {
+    "font_name": "Calibri",
+    "font_size": 11,
+    "title_font_size": 16,
+    "heading_font_size": 13,
+    "margins": {
+      "top": 1,
+      "bottom": 1,
+      "left": 1,
+      "right": 1
+    }
+  },
+  "Modern Blue": {
+    "font_name": "Aptos",
+    "font_size": 11,
+    "title_font_size": 24,
+    "heading_font_size": 15,
+    "margins": {
+      "top": 0.8,
+      "bottom": 0.8,
+      "left": 0.9,
+      "right": 0.9
+    },
+    "accent_color": "#254E87",
+    "accent_light": "#E5EFFB",
+    "text_color": "#18345D",
+    "description": "A polished blue-accented design for technical and engineering reports."
+  },
+  "Rose Editorial": {
+    "font_name": "Georgia",
+    "font_size": 11,
+    "title_font_size": 24,
+    "heading_font_size": 15,
+    "margins": {
+      "top": 0.85,
+      "bottom": 0.85,
+      "left": 0.9,
+      "right": 0.9
+    },
+    "accent_color": "#B34450",
+    "accent_light": "#F9E8E7",
+    "text_color": "#6E2733",
+    "description": "An editorial-inspired style for academic and research reports."
+  },
+  "Emerald Professional": {
+    "font_name": "Aptos",
+    "font_size": 11,
+    "title_font_size": 22,
+    "heading_font_size": 14,
+    "margins": {
+      "top": 0.8,
+      "bottom": 0.8,
+      "left": 0.85,
+      "right": 0.85
+    },
+    "accent_color": "#24765B",
+    "accent_light": "#E3F2EA",
+    "text_color": "#18523F",
+    "description": "A clean green-accented layout for business and analytical reports."
+  },
+  "Warm Classic": {
+    "font_name": "Georgia",
+    "font_size": 11,
+    "title_font_size": 22,
+    "heading_font_size": 14,
+    "margins": {
+      "top": 1,
+      "bottom": 0.9,
+      "left": 1,
+      "right": 1
+    },
+    "accent_color": "#A36D2C",
+    "accent_light": "#F6EBD6",
+    "text_color": "#65451F",
+    "description": "A warm, classic style for formal submissions and portfolios."
+  }
 }
