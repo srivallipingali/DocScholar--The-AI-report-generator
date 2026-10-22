@@ -9,6 +9,15 @@ from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 
 
+def _hex_color(value):
+    """Convert a #RRGGBB template color into Word RGBColor safely."""
+
+    value = str(value or "#6A1B4D").strip().lstrip("#")
+    if len(value) != 6 or any(char not in "0123456789abcdefABCDEF" for char in value):
+        value = "6A1B4D"
+    return RGBColor(int(value[0:2], 16), int(value[2:4], 16), int(value[4:6], 16))
+
+
 def _prepare_output(output_path):
     """Create the output folder if a file path was given.
 
@@ -33,6 +42,10 @@ def _create_styled_document(config):
 
     document = Document()
 
+    # Read optional template colors. Existing templates keep their original look.
+    accent = _hex_color(config.get("accent_color", "#6A1B4D"))
+    text_color = _hex_color(config.get("text_color", "#29232A"))
+
     # Page margins.
     margins = config["margins"]
 
@@ -49,6 +62,7 @@ def _create_styled_document(config):
     normal_style = document.styles["Normal"]
     normal_style.font.name = font_name
     normal_style.font.size = Pt(font_size)
+    normal_style.font.color.rgb = text_color
 
     # Main report title style.
     title_style = document.styles["Title"]
@@ -57,6 +71,7 @@ def _create_styled_document(config):
         config.get("title_font_size", 18)
     )
     title_style.font.bold = True
+    title_style.font.color.rgb = accent
 
     # Section heading style.
     heading_style = document.styles["Heading 1"]
@@ -65,6 +80,7 @@ def _create_styled_document(config):
         config.get("heading_font_size", 14)
     )
     heading_style.font.bold = True
+    heading_style.font.color.rgb = accent
 
     return document
 
@@ -116,6 +132,7 @@ def _configure_page_numbering(document):
 def _add_cover_page(document, title, config, subtitle=None, abstract=None):
     """Generate an elegant, professional front cover page."""
     font_name = config.get("font_name", "Arial")
+    accent = _hex_color(config.get("accent_color", "#6A1B4D"))
     template_name = config.get("template_name", "Report").upper()
 
     p_top = document.add_paragraph()
@@ -126,7 +143,7 @@ def _add_cover_page(document, title, config, subtitle=None, abstract=None):
     tag_run.font.name = font_name
     tag_run.font.size = Pt(10)
     tag_run.font.bold = True
-    tag_run.font.color.rgb = RGBColor(0x6A, 0x1B, 0x4D)
+    tag_run.font.color.rgb = accent
     p_tag.paragraph_format.space_after = Pt(12)
 
     p_title = document.add_paragraph()
@@ -134,11 +151,12 @@ def _add_cover_page(document, title, config, subtitle=None, abstract=None):
     title_run.font.name = font_name
     title_run.font.size = Pt(max(24, config.get("title_font_size", 18) + 8))
     title_run.font.bold = True
+    title_run.font.color.rgb = accent
     p_title.paragraph_format.space_after = Pt(12)
 
     p_line = document.add_paragraph()
     line_run = p_line.add_run("―" * 32)
-    line_run.font.color.rgb = RGBColor(0x9E, 0x2A, 0x54)
+    line_run.font.color.rgb = accent
     line_run.font.size = Pt(11)
     p_line.paragraph_format.space_after = Pt(18)
 
@@ -195,6 +213,7 @@ def _add_cover_page(document, title, config, subtitle=None, abstract=None):
 def _add_index_page(document, sections, config, start_page=3):
     """Generate a clean Table of Contents / Index page."""
     font_name = config.get("font_name", "Arial")
+    accent = _hex_color(config.get("accent_color", "#6A1B4D"))
     margins = config.get("margins", {"left": 1.0, "right": 1.0})
     left_m = margins.get("left", 1.0)
     right_m = margins.get("right", 1.0)
@@ -228,7 +247,7 @@ def _add_index_page(document, sections, config, start_page=3):
         num_run.font.name = font_name
         num_run.font.bold = True
         num_run.font.size = Pt(11)
-        num_run.font.color.rgb = RGBColor(0x6A, 0x1B, 0x4D)
+        num_run.font.color.rgb = accent
 
         heading_text = section.heading if hasattr(section, "heading") else str(section)
         heading_run = p.add_run(f"{heading_text}\t")
