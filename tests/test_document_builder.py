@@ -119,3 +119,53 @@ def test_structured_report_can_write_to_memory():
 
     buffer.seek(0)
     assert len(Document(buffer).paragraphs) > 0
+
+
+def test_structured_report_with_cover_page_and_index(tmp_path):
+    output_path = tmp_path / "full_featured.docx"
+    config = sample_config()
+    config["report_title"] = ""
+    config["include_cover_page"] = True
+    config["include_index"] = True
+    config["section_per_page"] = True
+    config["author"] = "Research Team"
+    config["template_name"] = "Academic Report"
+
+    report = StructuredReport(
+        title="Solar Power Future",
+        subtitle="A Technical Evaluation",
+        abstract="Executive overview of solar photovoltaics.",
+        sections=[
+            Section(heading="Introduction", content="Solar energy is growing."),
+            Section(heading="Efficiency", content="Modern panels reach 24%."),
+            Section(heading="Conclusion", content="Solar adoption is essential."),
+        ],
+    )
+
+    build_structured_report(report, config, output_path)
+
+    doc = Document(output_path)
+    all_text = " ".join(p.text for p in doc.paragraphs)
+
+    # Verify Cover Page items
+    assert "ACADEMIC REPORT" in all_text
+    assert "Solar Power Future" in all_text
+    assert "A Technical Evaluation" in all_text
+    assert "Executive overview of solar photovoltaics." in all_text
+    assert "Prepared by: Research Team" in all_text
+
+    # Verify Table of Contents
+    assert "Table of Contents" in all_text
+    assert "Introduction" in all_text
+    assert "Efficiency" in all_text
+    assert "Conclusion" in all_text
+
+    # Verify page breaks (each topic on a new page)
+    # In docx, page breaks are rendered as w:br w:type="page" or in runs
+    page_break_count = sum(
+        1 for p in doc.paragraphs
+        for run in p.runs
+        if "w:br" in run._r.xml and 'w:type="page"' in run._r.xml
+    )
+    # At least 4 page breaks: after cover, after index, after section 1, after section 2
+    assert page_break_count >= 4

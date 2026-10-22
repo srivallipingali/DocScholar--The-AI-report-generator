@@ -23,29 +23,43 @@ from pydantic import ValidationError
 from report_generator.report_schema import StructuredReport
 
 # Override with the GEMINI_MODEL environment variable if this name is retired.
-DEFAULT_MODEL = "gemini-3.8-flash"
+DEFAULT_MODEL = "gemini-3.5-flash"
+FALLBACK_MODELS = ["gemini-3.8-flash", "gemini-3.5-flash-lite"]
 
 # Guard against huge uploads. Very long inputs cost more and can exceed limits.
 MAX_INPUT_CHARACTERS = 60_000
 
 
-def build_prompt(source_text, report_type=None):
+def build_prompt(source_text, report_type=None, custom_instructions=None):
     """Create the instruction that tells the model what to produce."""
 
     focus = f" The report should follow a {report_type} style." if report_type else ""
+
+    custom_section = ""
+    if custom_instructions and custom_instructions.strip():
+        custom_section = (
+            "USER'S SPECIAL INSTRUCTIONS / NOTES:\n"
+            f"{custom_instructions.strip()}\n"
+            "Please follow these specific instructions closely when writing, "
+            "tailoring, and structuring the report.\n\n"
+        )
 
     return (
         "You are an assistant that writes clear, well-organised reports."
         f"{focus}\n\n"
         "Read the SOURCE MATERIAL below and turn it into a structured report "
-        "with a title and logical sections (for example Introduction, main "
-        "body sections, Conclusion).\n"
+        "with a title, an optional subtitle/abstract for the cover page, and "
+        "logical sections (for example Introduction, key body topics, Conclusion).\n"
+        "Each section should cover a distinct topic so it can be presented as an "
+        "individual topic page with its own heading in the table of contents.\n\n"
+        f"{custom_section}"
         "Rules:\n"
         "- Use only information from the source material. Do not invent "
         "facts, figures or citations.\n"
+        "- Provide a professional title and a concise subtitle for the cover page.\n"
         "- Write in complete, formal paragraphs. Separate paragraphs with a "
         "blank line.\n"
-        "- Keep each heading short.\n\n"
+        "- Keep each heading short and descriptive.\n\n"
         "SOURCE MATERIAL:\n"
         f"{source_text}"
     )
@@ -95,26 +109,40 @@ def _call_gemini(prompt):
         ) from error
 
     model_name = os.environ.get("GEMINI_MODEL", DEFAULT_MODEL)
+    models_to_try = [model_name] + [m for m in FALLBACK_MODELS if m != model_name]
 
-    try:
-        client = genai.Client(api_key=api_key)
-        response = client.models.generate_content(
-            model=model_name,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                # Ask for JSON that follows our schema.
-                response_mime_type="application/json",
-                response_schema=StructuredReport,
-            ),
-        )
-    except Exception as error:  # SDK raises several different error types
-        raise RuntimeError(f"The Gemini request failed: {error}") from error
+    client = genai.Client(api_key=api_key)
+    last_error = None
 
-    return response.text
+    for model in models_to_try:
+        try:
+            response = client.models.generate_content(
+                model=model,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    # Ask for JSON that follows our schema.
+                    response_mime_type="application/json",
+                    response_schema=StructuredReport,
+                ),
+            )
+            return response.text
+        except Exception as error:  # SDK raises several different error types
+            last_error = error
+            continue
+
+    raise RuntimeError(f"The Gemini request failed: {last_error}") from last_error
 
 
-def structure_report(source_text, report_type=None, generate=None):
+def structure_report(
+    source_text,
+    report_type=None,
+    custom_instructions=None,
+    generate=None,
+):
     """Convert raw text into a validated StructuredReport.
+
+    `custom_instructions` allows the user to pass custom notes, style preferences,
+    or guidelines to tailor the AI output.
 
     `generate` is a function that takes a prompt string and returns the
     model's JSON reply as text. It defaults to the real Gemini call.
@@ -132,7 +160,11 @@ def structure_report(source_text, report_type=None, generate=None):
     if generate is None:
         generate = _call_gemini
 
-    prompt = build_prompt(source_text.strip(), report_type)
+    prompt = build_prompt(
+        source_text.strip(),
+        report_type=report_type,
+        custom_instructions=custom_instructions,
+    )
     reply = generate(prompt)
 
     return parse_report(reply)

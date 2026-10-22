@@ -73,6 +73,16 @@ def test_prompt_mentions_report_type_when_given():
     assert "Business Report" in build_prompt("text", "Business Report")
 
 
+def test_prompt_includes_custom_instructions():
+    prompt = build_prompt(
+        "source material",
+        report_type="Academic Report",
+        custom_instructions="Focus on environmental impact",
+    )
+    assert "Focus on environmental impact" in prompt
+    assert "USER'S SPECIAL INSTRUCTIONS" in prompt
+
+
 # ---------- structure_report (with a fake model) ----------
 
 def test_structure_report_uses_generate_function():
@@ -91,6 +101,22 @@ def test_structure_report_sends_source_text_to_model():
     structure_report("Unique marker text.", generate=spy)
 
     assert "Unique marker text." in seen["prompt"]
+
+
+def test_structure_report_sends_custom_instructions_to_model():
+    seen = {}
+
+    def spy(prompt):
+        seen["prompt"] = prompt
+        return VALID_REPLY
+
+    structure_report(
+        "Source text.",
+        custom_instructions="Include ethical analysis",
+        generate=spy,
+    )
+
+    assert "Include ethical analysis" in seen["prompt"]
 
 
 def test_structure_report_rejects_empty_input():

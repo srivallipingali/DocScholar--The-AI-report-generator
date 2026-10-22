@@ -27,11 +27,19 @@ class Section(BaseModel):
 
 
 class StructuredReport(BaseModel):
-    """A whole report: a title and an ordered list of sections."""
+    """A whole report: title, optional subtitle/abstract, and an ordered list of sections."""
 
     title: str = Field(
         min_length=1,
         description="Concise title for the report.",
+    )
+    subtitle: str | None = Field(
+        default=None,
+        description="A concise subtitle or summary line for the cover page.",
+    )
+    abstract: str | None = Field(
+        default=None,
+        description="Optional brief abstract or executive summary for the cover page.",
     )
     sections: list[Section] = Field(
         min_length=1,

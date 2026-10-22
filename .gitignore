@@ -3,5 +3,6 @@ __pycache__/
 .pytest_cache/
 .DS_Store
 .env
+.streamlit/
 output/*
 !output/.gitkeep

@@ -14,13 +14,20 @@ from report_generator.document_builder import (
 from report_generator.file_reader import read_file
 from report_generator.template_loader import load_templates
 
+import os
+
 # Load GEMINI_API_KEY from a local .env file if python-dotenv is installed.
-# On a deployed app the key comes from the host's secrets instead.
+# On a deployed app or Streamlit environment, fall back to st.secrets.
 try:
     from dotenv import load_dotenv
     load_dotenv()
 except ImportError:
     pass
+
+if "GEMINI_API_KEY" in st.secrets:
+    current_key = os.environ.get("GEMINI_API_KEY")
+    if not current_key or current_key == "your_key_here":
+        os.environ["GEMINI_API_KEY"] = st.secrets["GEMINI_API_KEY"]
 
 
 # --------------------------------------------------
@@ -339,6 +346,48 @@ with st.container(border=True):
         placeholder="e.g. Renewable Energy: A Technical Overview",
     )
 
+    author_name = st.text_input(
+        "Author / Prepared By (optional)",
+        placeholder="e.g. Srivalli Pingali / Research Department",
+        help="Appears on the cover page of your report.",
+    )
+
+    custom_notes = ""
+    if use_ai:
+        custom_notes = st.text_area(
+            "Tailoring Notes / Instructions for AI (optional)",
+            height=100,
+            placeholder=(
+                "Give specific instructions to tailor your report output, e.g.:\n"
+                "• Focus heavily on business impact and key takeaways\n"
+                "• Write in an executive, formal tone\n"
+                "• Emphasize safety, privacy, and regulatory considerations\n"
+                "• Target an undergraduate engineering audience"
+            ),
+            help="Gemini will read your instructions and tailor the structure, tone, and emphasis of the report accordingly.",
+        )
+
+    st.markdown("<p style='color: #4c227d; font-weight: 600; margin-top: 10px; margin-bottom: 4px;'>Document Layout & Structure</p>", unsafe_allow_html=True)
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        include_cover_page = st.checkbox(
+            "Include Cover Page",
+            value=True,
+            help="Generate an elegant front cover page with title, subtitle, and metadata.",
+        )
+    with col2:
+        include_index = st.checkbox(
+            "Table of Contents (Index)",
+            value=True,
+            help="Generate an index page listing all report topics.",
+        )
+    with col3:
+        section_per_page = st.checkbox(
+            "Each Topic on New Page",
+            value=True,
+            help="Insert a page break between each topic so each section starts fresh on a new page.",
+        )
+
     selected_template = st.selectbox(
         "Choose a report template",
         options=list(templates.keys()),
@@ -418,6 +467,11 @@ if st.button(
             # Use the title entered by the user (may be empty when using AI,
             # in which case the AI's suggested title is used instead).
             config["report_title"] = report_title.strip()
+            config["author"] = author_name.strip()
+            config["template_name"] = selected_template
+            config["include_cover_page"] = include_cover_page
+            config["include_index"] = include_index
+            config["section_per_page"] = section_per_page
 
             # Generate the document in memory.
             document_bytes = BytesIO()
@@ -427,6 +481,7 @@ if st.button(
                     structured_report = structure_report(
                         report_text,
                         report_type=selected_template,
+                        custom_instructions=custom_notes.strip() if custom_notes else None,
                     )
 
                 build_structured_report(
