@@ -18,24 +18,27 @@ def search_wikimedia_images(query, limit=6):
     if not query:
         raise ValueError("Enter a topic to search for images.")
 
-    response = requests.get(
-        COMMONS_API_URL,
-        params={
-            "action": "query",
-            "generator": "search",
-            "gsrsearch": f"filetype:bitmap {query}",
-            "gsrnamespace": 6,
-            "gsrlimit": max(1, min(int(limit), 10)),
-            "prop": "imageinfo|info",
-            "inprop": "url",
-            "iiprop": "url|extmetadata",
-            "iiurlwidth": 900,
-            "format": "json",
-        },
-        headers={"User-Agent": "DocScholarReportGenerator/1.0 (educational project)"},
-        timeout=15,
-    )
-    response.raise_for_status()
+    try:
+        response = requests.get(
+            COMMONS_API_URL,
+            params={
+                "action": "query",
+                "generator": "search",
+                "gsrsearch": f"filetype:bitmap {query}",
+                "gsrnamespace": 6,
+                "gsrlimit": max(1, min(int(limit), 10)),
+                "prop": "imageinfo|info",
+                "inprop": "url",
+                "iiprop": "url|extmetadata",
+                "iiurlwidth": 900,
+                "format": "json",
+            },
+            headers={"User-Agent": "DocScholarReportGenerator/1.0 (educational project)"},
+            timeout=15,
+        )
+        response.raise_for_status()
+    except requests.RequestException as error:
+        raise RuntimeError("Could not reach Wikimedia Commons. Check your internet connection and try again.") from error
 
     try:
         pages = response.json().get("query", {}).get("pages", {})
@@ -80,12 +83,15 @@ def download_wikimedia_image(image_result):
     if not image_url or not _is_allowed_image_url(image_url):
         raise ValueError("This image does not have a trusted Wikimedia Commons URL.")
 
-    response = requests.get(
-        image_url,
-        headers={"User-Agent": "DocScholarReportGenerator/1.0 (educational project)"},
-        timeout=20,
-    )
-    response.raise_for_status()
+    try:
+        response = requests.get(
+            image_url,
+            headers={"User-Agent": "DocScholarReportGenerator/1.0 (educational project)"},
+            timeout=20,
+        )
+        response.raise_for_status()
+    except requests.RequestException as error:
+        raise RuntimeError("Could not download this image from Wikimedia Commons. Please try another image.") from error
 
     try:
         with Image.open(BytesIO(response.content)) as image:
