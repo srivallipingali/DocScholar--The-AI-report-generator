@@ -49,4 +49,5 @@ websockets>=13.0,<17.0
 
 pydantic
 google-genai
-python-dotenv\npython-pptx\n
+python-dotenv
+python-pptx
