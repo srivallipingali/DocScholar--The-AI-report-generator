@@ -3,8 +3,10 @@
 The reader preserves slide boundaries and associates each image with the text
 on its slide. This context can later be passed to the AI for report placement.
 """
+from io import BytesIO
 from pathlib import Path
 
+from PIL import Image
 from pptx import Presentation
 
 
@@ -66,14 +68,35 @@ def read_pptx(file_path):
             if shape.shape_type == 13:  # MSO_SHAPE_TYPE.PICTURE
                 try:
                     picture = shape.image
-                    extension = picture.ext or "png"
-                    image_name = f"slide_{slide_number}_image_{len(slide_images) + 1}.{extension}"
+                    original_extension = (picture.ext or "png").lower()
+                    original_bytes = picture.blob
+
+                    # Normalise raster images to PNG for dependable Word embedding.
+                    # Vector formats that Pillow cannot decode are skipped rather than
+                    # causing the whole report to fail during DOCX generation.
+                    try:
+                        with Image.open(BytesIO(original_bytes)) as source_image:
+                            if source_image.mode in ("RGBA", "LA") or "transparency" in source_image.info:
+                                prepared_image = source_image.convert("RGBA")
+                            else:
+                                prepared_image = source_image.convert("RGB")
+                            output = BytesIO()
+                            prepared_image.save(output, format="PNG")
+                            image_bytes = output.getvalue()
+                    except Exception:
+                        # Already-supported raster formats may be preserved as-is.
+                        if original_extension not in {"png", "jpg", "jpeg", "bmp", "gif", "tif", "tiff"}:
+                            continue
+                        image_bytes = original_bytes
+
+                    image_name = f"slide_{slide_number}_image_{len(slide_images) + 1}.png"
                     slide_images.append({
                         "name": image_name,
-                        "data": picture.blob,
+                        "data": image_bytes,
+                        "mime_type": "image/png",
                         "slide_number": slide_number,
                     })
-                except (AttributeError, ValueError):
+                except Exception:
                     # One unsupported/corrupt picture should not discard slide text.
                     continue
 
