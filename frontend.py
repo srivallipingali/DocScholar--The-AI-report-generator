@@ -290,39 +290,39 @@ st.markdown(
 
 st.markdown(
     '<div class="section-description">'
-    'Give us your input'
+    'Add text and/or upload multiple source documents.'
     '</div>',
     unsafe_allow_html=True,
 )
 
-report_text = ""
+# Keep each source separate in memory so a later step can let users
+# combine sources or ask the AI to keep them distinct.
+source_items = []
 
 with st.container(border=True):
-
-    input_method = st.selectbox(
-        "Enter your choice of input method",
-        ["Type or paste text", "Upload a PDF or DOCX"],
-        index=0,
+    typed_text = st.text_area(
+        "Type or paste text (optional)",
+        height=220,
+        placeholder="Paste notes, research, or other text here. You can also upload documents below.",
     )
 
-    if input_method == "Type or paste text":
+    uploaded_files = st.file_uploader(
+        "Upload source documents (optional)",
+        type=["pdf", "docx"],
+        accept_multiple_files=True,
+        help="You can select multiple PDF and Word documents. Text and documents can be used together.",
+    )
 
-        report_text = st.text_area(
-            "Report content",
-            height=260,
-            placeholder="Enter or paste the text for your report.",
+    if typed_text and typed_text.strip():
+        source_items.append(
+            {
+                "name": "Pasted text",
+                "text": typed_text.strip(),
+            }
         )
 
-    else:
-
-        uploaded_file = st.file_uploader(
-            "Choose your source document",
-            type=["pdf", "docx"],
-            help="Upload a readable PDF or Word document.",
-        )
-
-        if uploaded_file is not None:
-
+    if uploaded_files:
+        for uploaded_file in uploaded_files:
             suffix = Path(uploaded_file.name).suffix
 
             try:
@@ -330,18 +330,42 @@ with st.container(border=True):
                     suffix=suffix,
                     delete=True,
                 ) as temporary_file:
-
                     temporary_file.write(uploaded_file.getvalue())
                     temporary_file.flush()
+                    extracted_text = read_file(temporary_file.name)
 
-                    report_text = read_file(temporary_file.name)
-
-                st.success(
-                    f"Successfully read: {uploaded_file.name}"
+                source_items.append(
+                    {
+                        "name": uploaded_file.name,
+                        "text": extracted_text,
+                    }
                 )
+                st.success(f"Successfully read: {uploaded_file.name}")
 
             except (ValueError, OSError, RuntimeError) as error:
-                st.error(f"Could not read the document: {error}")
+                st.error(
+                    f"Could not read {uploaded_file.name}: {error}"
+                )
+
+# Keep the existing report-generation functions working by joining the
+# readable sources with clear labels. The original source list is preserved
+# above for the upcoming combine-versus-distinct option.
+report_text = "\\n\\n".join(
+    f"===== SOURCE: {source['name']} =====\\n{source['text']}"
+    for source in source_items
+)
+
+if source_items:
+    st.caption(
+        f"{len(source_items)} readable source(s) added · "
+        f"{len(report_text):,} characters total"
+    )
+
+    if len(report_text) > 60_000:
+        st.warning(
+            "Your combined input exceeds Gemini's 60,000-character limit. "
+            "Please shorten the text or remove some documents before using AI."
+        )
 
 
 # --------------------------------------------------
