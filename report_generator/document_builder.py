@@ -301,10 +301,17 @@ def _add_uploaded_images(document, images):
 
         paragraph = document.add_paragraph()
         paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        paragraph.add_run().add_picture(
-            BytesIO(image_data),
-            width=Inches(5.5),
-        )
+        try:
+            paragraph.add_run().add_picture(
+                BytesIO(image_data),
+                width=Inches(5.5),
+            )
+        except Exception as error:
+            raise ValueError(
+                f"Could not insert uploaded image "
+                f"{image.get('name', f'Figure {index}')}: "
+                "please upload a valid PNG or JPG image."
+            ) from error
 
         caption_text = (image.get("caption") or "").strip()
         if not caption_text:
