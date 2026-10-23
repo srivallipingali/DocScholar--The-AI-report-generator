@@ -290,7 +290,7 @@ st.markdown(
 
 st.markdown(
     '<div class="section-description">'
-    'Add text and/or upload multiple source documents.'
+    'Add text, source documents, and optional images for your report.'
     '</div>',
     unsafe_allow_html=True,
 )
@@ -312,6 +312,33 @@ with st.container(border=True):
         accept_multiple_files=True,
         help="You can select multiple PDF and Word documents. Text and documents can be used together.",
     )
+
+    uploaded_images = st.file_uploader(
+        "Upload images to include in the report (optional)",
+        type=["png", "jpg", "jpeg"],
+        accept_multiple_files=True,
+        help="PNG and JPG images will be added to an Uploaded Images section at the end of your Word report.",
+        key="report_image_uploader",
+    )
+
+    report_images = []
+    if uploaded_images:
+        st.caption("Images are currently added in a separate section at the end of the report.")
+        for image_index, uploaded_image in enumerate(uploaded_images, start=1):
+            image_bytes = uploaded_image.getvalue()
+            st.image(image_bytes, caption=uploaded_image.name, width=180)
+            image_caption = st.text_input(
+                f"Caption for {uploaded_image.name}",
+                placeholder="Optional: describe what this image shows",
+                key=f"report_image_caption_{image_index}_{uploaded_image.name}",
+            )
+            report_images.append(
+                {
+                    "name": uploaded_image.name,
+                    "data": image_bytes,
+                    "caption": image_caption.strip(),
+                }
+            )
 
     if typed_text and typed_text.strip():
         source_items.append(
@@ -703,6 +730,7 @@ if st.button(
                     structured_report,
                     config,
                     document_bytes,
+                    images=report_images,
                 )
 
                 final_title = (
@@ -714,6 +742,7 @@ if st.button(
                     report_text,
                     config,
                     document_bytes,
+                    images=report_images,
                 )
 
                 final_title = report_title.strip()
