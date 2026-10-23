@@ -13,6 +13,7 @@ from report_generator.document_builder import (
     build_structured_report,
 )
 from report_generator.file_reader import read_file
+from report_generator.pptx_reader import read_pptx
 from report_generator.online_images import (
     download_wikimedia_image,
     search_wikimedia_images,
@@ -302,6 +303,7 @@ st.markdown(
 # Keep each source separate in memory so a later step can let users
 # combine sources or ask the AI to keep them distinct.
 source_items = []
+pptx_images = []
 
 with st.container(border=True):
     typed_text = st.text_area(
@@ -312,9 +314,9 @@ with st.container(border=True):
 
     uploaded_files = st.file_uploader(
         "Upload source documents (optional)",
-        type=["pdf", "docx"],
+        type=["pdf", "docx", "pptx"],
         accept_multiple_files=True,
-        help="You can select multiple PDF and Word documents. Text and documents can be used together.",
+        help="You can select multiple PDF, Word, and PowerPoint documents. Text and documents can be used together.",
     )
 
     uploaded_images = st.file_uploader(
@@ -407,7 +409,14 @@ with st.container(border=True):
                 ) as temporary_file:
                     temporary_file.write(uploaded_file.getvalue())
                     temporary_file.flush()
-                    extracted_text = read_file(temporary_file.name)
+                    if suffix.lower() == ".pptx":
+                        pptx_content = read_pptx(temporary_file.name)
+                        extracted_text = pptx_content["text"]
+                        for image_index, pptx_image in enumerate(pptx_content["images"], start=1):
+                            pptx_image["id"] = f"{uploaded_file.name}:image_{image_index}"
+                            pptx_images.append(pptx_image)
+                    else:
+                        extracted_text = read_file(temporary_file.name)
 
                 source_items.append(
                     {
@@ -767,7 +776,7 @@ if st.button(
             document_bytes = BytesIO()
 
             # Download only online images the user explicitly selected.
-            images_for_report = list(report_images)
+            images_for_report = list(report_images) + list(pptx_images)
             online_results = st.session_state.get("online_image_results", [])
             for online_index, online_image in enumerate(online_results):
                 if st.session_state.get(
@@ -794,10 +803,15 @@ if st.button(
 
             if use_ai:
                 with st.spinner("Organising your content with AI..."):
+                    image_context = "\n".join(
+                        f"ID: {image['id']} | Name: {image['name']} | Slide: {image.get('slide_number')} | Context: {image.get('context', '')[:700]}"
+                        for image in pptx_images
+                    )
                     structured_report = structure_report(
                         report_text,
                         report_type=selected_template,
                         custom_instructions=custom_notes.strip() if custom_notes else None,
+                        image_context=image_context or None,
                     )
 
                 build_structured_report(
