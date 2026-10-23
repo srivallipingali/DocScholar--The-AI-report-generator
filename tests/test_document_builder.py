@@ -180,3 +180,60 @@ def test_structured_report_with_cover_page_and_index(tmp_path):
     )
     # At least 4 page breaks: after cover, after index, after section 1, after section 2
     assert page_break_count >= 4
+
+
+def test_structured_report_includes_uploaded_image_and_caption(tmp_path):
+    from io import BytesIO
+    from PIL import Image
+
+    image_buffer = BytesIO()
+    Image.new("RGB", (80, 50), color="red").save(image_buffer, format="PNG")
+
+    output_path = tmp_path / "report_with_image.docx"
+    build_structured_report(
+        sample_report(),
+        sample_config(),
+        output_path,
+        images=[
+            {
+                "name": "solar-panel.png",
+                "data": image_buffer.getvalue(),
+                "caption": "Solar panels in a field",
+            }
+        ],
+    )
+
+    document = Document(output_path)
+    paragraph_text = [paragraph.text for paragraph in document.paragraphs]
+
+    assert "Uploaded Images" in paragraph_text
+    assert "Figure 1. Solar panels in a field" in paragraph_text
+    assert len(document.inline_shapes) == 1
+
+
+def test_structured_report_uses_filename_when_image_caption_is_empty(tmp_path):
+    from io import BytesIO
+    from PIL import Image
+
+    image_buffer = BytesIO()
+    Image.new("RGB", (80, 50), color="blue").save(image_buffer, format="PNG")
+
+    output_path = tmp_path / "report_with_default_caption.docx"
+    build_structured_report(
+        sample_report(),
+        sample_config(),
+        output_path,
+        images=[
+            {
+                "name": "diagram.png",
+                "data": image_buffer.getvalue(),
+                "caption": "",
+            }
+        ],
+    )
+
+    document = Document(output_path)
+    assert "Figure 1. diagram.png" in [
+        paragraph.text for paragraph in document.paragraphs
+    ]
+    assert len(document.inline_shapes) == 1

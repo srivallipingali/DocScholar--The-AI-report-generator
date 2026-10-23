@@ -1,6 +1,7 @@
 
 import datetime
 from pathlib import Path
+from io import BytesIO
 
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT, WD_TAB_LEADER
@@ -281,6 +282,48 @@ def _add_paragraphs(document, body):
             document.add_paragraph(cleaned_paragraph)
 
 
+def _add_uploaded_images(document, images):
+    """Append uploaded images with captions to the end of the report.
+
+    Each image is a dictionary with a filename, image bytes, and an optional
+    caption. Image placement inside individual AI sections can be added later.
+    """
+    if not images:
+        return
+
+    document.add_page_break()
+    document.add_heading("Uploaded Images", level=1)
+
+    for index, image in enumerate(images, start=1):
+        image_data = image.get("data")
+        if not image_data:
+            continue
+
+        paragraph = document.add_paragraph()
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        try:
+            paragraph.add_run().add_picture(
+                BytesIO(image_data),
+                width=Inches(5.5),
+            )
+        except Exception as error:
+            raise ValueError(
+                f"Could not insert uploaded image "
+                f"{image.get('name', f'Figure {index}')}: "
+                "please upload a valid PNG or JPG image."
+            ) from error
+
+        caption_text = (image.get("caption") or "").strip()
+        if not caption_text:
+            caption_text = image.get("name") or f"Figure {index}"
+
+        caption = document.add_paragraph(
+            f"Figure {index}. {caption_text}",
+            style="Caption",
+        )
+        caption.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+
 def _save(document, output_path):
     """Save the document and return the same path (or BytesIO) it was given."""
 
@@ -289,7 +332,7 @@ def _save(document, output_path):
     return output_path
 
 
-def build_report(text, config, output_path):
+def build_report(text, config, output_path, images=None):
     """
     Create a formatted Word report from plain text (no AI involved).
 
@@ -318,11 +361,12 @@ def build_report(text, config, output_path):
         document.add_paragraph(title, style="Title")
 
     _add_paragraphs(document, text.strip())
+    _add_uploaded_images(document, images)
 
     return _save(document, output_path)
 
 
-def build_structured_report(report, config, output_path):
+def build_structured_report(report, config, output_path, images=None):
     """
     Create a formatted Word report from a StructuredReport (the AI path).
 
@@ -376,5 +420,7 @@ def build_structured_report(report, config, output_path):
             document.add_page_break()
         document.add_heading(section.heading, level=1)
         _add_paragraphs(document, section.content)
+
+    _add_uploaded_images(document, images)
 
     return _save(document, output_path)

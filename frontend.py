@@ -13,6 +13,10 @@ from report_generator.document_builder import (
     build_structured_report,
 )
 from report_generator.file_reader import read_file
+from report_generator.online_images import (
+    download_wikimedia_image,
+    search_wikimedia_images,
+)
 from report_generator.template_loader import load_templates
 
 import os
@@ -290,39 +294,110 @@ st.markdown(
 
 st.markdown(
     '<div class="section-description">'
-    'Give us your input'
+    'Add text, source documents, and optional images for your report.'
     '</div>',
     unsafe_allow_html=True,
 )
 
-report_text = ""
+# Keep each source separate in memory so a later step can let users
+# combine sources or ask the AI to keep them distinct.
+source_items = []
 
 with st.container(border=True):
-
-    input_method = st.selectbox(
-        "Enter your choice of input method",
-        ["Type or paste text", "Upload a PDF or DOCX"],
-        index=0,
+    typed_text = st.text_area(
+        "Type or paste text (optional)",
+        height=220,
+        placeholder="Paste notes, research, or other text here. You can also upload documents below.",
     )
 
-    if input_method == "Type or paste text":
+    uploaded_files = st.file_uploader(
+        "Upload source documents (optional)",
+        type=["pdf", "docx"],
+        accept_multiple_files=True,
+        help="You can select multiple PDF and Word documents. Text and documents can be used together.",
+    )
 
-        report_text = st.text_area(
-            "Report content",
-            height=260,
-            placeholder="Enter or paste the text for your report.",
+    uploaded_images = st.file_uploader(
+        "Upload images to include in the report (optional)",
+        type=["png", "jpg", "jpeg"],
+        accept_multiple_files=True,
+        help="PNG and JPG images will be added to an Uploaded Images section at the end of your Word report.",
+        key="report_image_uploader",
+    )
+
+    report_images = []
+    if uploaded_images:
+        st.caption("Images are currently added in a separate section at the end of the report.")
+        for image_index, uploaded_image in enumerate(uploaded_images, start=1):
+            image_bytes = uploaded_image.getvalue()
+            st.image(image_bytes, caption=uploaded_image.name, width=180)
+            image_caption = st.text_input(
+                f"Caption for {uploaded_image.name}",
+                placeholder="Optional: describe what this image shows",
+                key=f"report_image_caption_{image_index}_{uploaded_image.name}",
+            )
+            report_images.append(
+                {
+                    "name": uploaded_image.name,
+                    "data": image_bytes,
+                    "caption": image_caption.strip(),
+                }
+            )
+
+    st.markdown("**Find optional images online**")
+    st.caption(
+        "Search Wikimedia Commons for images that can be reused under their "
+        "listed licenses. Check each image's license and attribution details."
+    )
+    online_image_query = st.text_input(
+        "Search topic",
+        placeholder="e.g. DC generator construction",
+        key="online_image_query",
+    )
+    if st.button("Search online images", key="search_online_images"):
+        if not online_image_query.strip():
+            st.warning("Enter a topic before searching.")
+        else:
+            try:
+                with st.spinner("Searching Wikimedia Commons..."):
+                    st.session_state["online_image_results"] = (
+                        search_wikimedia_images(online_image_query.strip())
+                    )
+                if not st.session_state["online_image_results"]:
+                    st.info("No suitable images were found. Try a shorter or different search.")
+            except Exception as error:
+                st.error(f"Online image search failed: {error}")
+
+    online_image_results = st.session_state.get("online_image_results", [])
+    if online_image_results:
+        st.caption("Select any images you want to include in your report.")
+        online_columns = st.columns(2)
+        for online_index, online_image in enumerate(online_image_results):
+            with online_columns[online_index % 2]:
+                st.image(online_image["thumbnail_url"], use_container_width=True)
+                st.markdown(f"**{escape(online_image['title'])}**")
+                if online_image.get("artist"):
+                    st.caption(f"Creator: {online_image['artist']}")
+                st.caption(
+                    "License: "
+                    + (online_image.get("license") or "Check source page")
+                )
+                st.markdown(f"[View source and license]({online_image['source_url']})")
+                st.checkbox(
+                    "Include this image",
+                    key=f"online_image_selected_{online_index}",
+                )
+
+    if typed_text and typed_text.strip():
+        source_items.append(
+            {
+                "name": "Pasted text",
+                "text": typed_text.strip(),
+            }
         )
 
-    else:
-
-        uploaded_file = st.file_uploader(
-            "Choose your source document",
-            type=["pdf", "docx"],
-            help="Upload a readable PDF or Word document.",
-        )
-
-        if uploaded_file is not None:
-
+    if uploaded_files:
+        for uploaded_file in uploaded_files:
             suffix = Path(uploaded_file.name).suffix
 
             try:
@@ -330,18 +405,42 @@ with st.container(border=True):
                     suffix=suffix,
                     delete=True,
                 ) as temporary_file:
-
                     temporary_file.write(uploaded_file.getvalue())
                     temporary_file.flush()
+                    extracted_text = read_file(temporary_file.name)
 
-                    report_text = read_file(temporary_file.name)
-
-                st.success(
-                    f"Successfully read: {uploaded_file.name}"
+                source_items.append(
+                    {
+                        "name": uploaded_file.name,
+                        "text": extracted_text,
+                    }
                 )
+                st.success(f"Successfully read: {uploaded_file.name}")
 
             except (ValueError, OSError, RuntimeError) as error:
-                st.error(f"Could not read the document: {error}")
+                st.error(
+                    f"Could not read {uploaded_file.name}: {error}"
+                )
+
+# Keep the existing report-generation functions working by joining the
+# readable sources with clear labels. The original source list is preserved
+# above for the upcoming combine-versus-distinct option.
+report_text = "\n\n".join(
+    f"===== SOURCE: {source['name']} =====\n{source['text']}"
+    for source in source_items
+)
+
+if source_items:
+    st.caption(
+        f"{len(source_items)} readable source(s) added · "
+        f"{len(report_text):,} characters total"
+    )
+
+    if len(report_text) > 60_000:
+        st.warning(
+            "Your combined input exceeds Gemini's 60,000-character limit. "
+            "Please shorten the text or remove some documents before using AI."
+        )
 
 
 # --------------------------------------------------
@@ -667,6 +766,32 @@ if st.button(
             # Generate the document in memory.
             document_bytes = BytesIO()
 
+            # Download only online images the user explicitly selected.
+            images_for_report = list(report_images)
+            online_results = st.session_state.get("online_image_results", [])
+            for online_index, online_image in enumerate(online_results):
+                if st.session_state.get(
+                    f"online_image_selected_{online_index}", False
+                ):
+                    image_bytes = download_wikimedia_image(online_image)
+                    attribution = online_image.get("title", "Online image")
+                    if online_image.get("artist"):
+                        attribution += f" | Creator: {online_image['artist']}"
+                    if online_image.get("license"):
+                        attribution += f" | License: {online_image['license']}"
+                    if online_image.get("license_url"):
+                        attribution += f" | License details: {online_image['license_url']}"
+                    attribution += f" | Source: {online_image['source_url']}"
+                    images_for_report.append(
+                        {
+                            "name": online_image.get("title", "online-image")
+                                .replace("File:", "")
+                                .replace("/", "-"),
+                            "data": image_bytes,
+                            "caption": attribution,
+                        }
+                    )
+
             if use_ai:
                 with st.spinner("Organising your content with AI..."):
                     structured_report = structure_report(
@@ -679,6 +804,7 @@ if st.button(
                     structured_report,
                     config,
                     document_bytes,
+                    images=images_for_report,
                 )
 
                 final_title = (
@@ -690,6 +816,7 @@ if st.button(
                     report_text,
                     config,
                     document_bytes,
+                    images=report_images,
                 )
 
                 final_title = report_title.strip()
