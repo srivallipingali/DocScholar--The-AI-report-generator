@@ -49,7 +49,13 @@ def build_prompt(source_text, report_type=None, custom_instructions=None, image_
         image_section = (
             "SOURCE IMAGES AND THEIR CONTEXT:\n"
             f"{image_context}\n"
-            "For relevant images, add their exact IDs to the appropriate section image_ids list. Use only supplied IDs.\n\n"
+            "You will also receive the actual image files labelled with these IDs. Inspect their visual content, "
+            "not just their slide text. Select only images that directly support a report section; omit decorative, "
+            "irrelevant, redundant, or unclear images. Add each selected image's exact ID to the most relevant "
+            "section image_ids list. Use only supplied IDs and do not assign one image to multiple sections. "
+            "For each selected image, provide one concise, factual image_captions entry (ideally 5–15 words) "
+            "describing what is visibly shown. Do not repeat the slide text or guess at details that cannot be seen. "
+            "Do not create captions for images you did not select.\n\n"
         )
 
     return (
@@ -96,8 +102,8 @@ def parse_report(json_text):
         ) from error
 
 
-def _call_gemini(prompt):
-    """Send the prompt to Gemini and return the raw JSON text it replies with."""
+def _call_gemini(prompt, image_inputs=None):
+    """Send text and optional labelled image parts to Gemini."""
 
     api_key = os.environ.get("GEMINI_API_KEY")
 
@@ -125,9 +131,24 @@ def _call_gemini(prompt):
 
     for model in models_to_try:
         try:
+            contents = [prompt]
+            for image in image_inputs or []:
+                image_id = str(image.get("id", "source image"))
+                contents.append(
+                    types.Part.from_text(
+                        text=f"Inspect the following source image. Its exact ID is {image_id}."
+                    )
+                )
+                contents.append(
+                    types.Part.from_bytes(
+                        data=image["data"],
+                        mime_type=image.get("mime_type", "image/png"),
+                    )
+                )
+
             response = client.models.generate_content(
                 model=model,
-                contents=prompt,
+                contents=contents,
                 config=types.GenerateContentConfig(
                     # Ask for JSON that follows our schema.
                     response_mime_type="application/json",
@@ -148,6 +169,7 @@ def structure_report(
     custom_instructions=None,
     generate=None,
     image_context=None,
+    image_inputs=None,
 ):
     """Convert raw text into a validated StructuredReport.
 
@@ -167,15 +189,16 @@ def structure_report(
             f"Please keep it under {MAX_INPUT_CHARACTERS:,}."
         )
 
-    if generate is None:
-        generate = _call_gemini
-
     prompt = build_prompt(
         source_text.strip(),
         report_type=report_type,
         custom_instructions=custom_instructions,
         image_context=image_context,
     )
-    reply = generate(prompt)
+    if generate is None:
+        reply = _call_gemini(prompt, image_inputs=image_inputs)
+    else:
+        # Keep the injectable one-argument generator used by unit tests.
+        reply = generate(prompt)
 
     return parse_report(reply)
