@@ -324,6 +324,23 @@ def _add_uploaded_images(document, images):
         caption.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
 
+
+def _add_images_inline(document, images, start_index=1):
+    """Insert images at the current position with captions."""
+    for index, image in enumerate(images, start=start_index):
+        if not image.get("data"):
+            continue
+        paragraph = document.add_paragraph()
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        try:
+            paragraph.add_run().add_picture(BytesIO(image["data"]), width=Inches(5.5))
+        except Exception as error:
+            raise ValueError(f"Could not insert image {image.get('name', index)}; use a valid image file.") from error
+        caption_text = (image.get("caption") or "").strip() or image.get("name") or f"Figure {index}"
+        caption = document.add_paragraph(f"Figure {index}. {caption_text}", style="Caption")
+        caption.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+
 def _save(document, output_path):
     """Save the document and return the same path (or BytesIO) it was given."""
 
@@ -415,12 +432,22 @@ def build_structured_report(report, config, output_path, images=None):
             start_page=start_page,
         )
 
+    images_by_id = {str(image.get("id")): image for image in (images or []) if image.get("id") is not None}
+    placed_ids = set()
+
     for i, section in enumerate(report.sections):
         if section_per_page and i > 0:
             document.add_page_break()
         document.add_heading(section.heading, level=1)
         _add_paragraphs(document, section.content)
+        for image_id in getattr(section, "image_ids", []):
+            image = images_by_id.get(str(image_id))
+            if image and image.get("data"):
+                _add_images_inline(document, [image], start_index=len(placed_ids) + 1)
+                placed_ids.add(str(image_id))
 
-    _add_uploaded_images(document, images)
+    # Unassigned images are preserved in a fallback section.
+    unplaced = [image for image in (images or []) if image.get("data") and (image.get("id") is None or str(image.get("id")) not in placed_ids)]
+    _add_uploaded_images(document, unplaced)
 
     return _save(document, output_path)
