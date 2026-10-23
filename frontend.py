@@ -414,6 +414,7 @@ with st.container(border=True):
                         extracted_text = pptx_content["text"]
                         for image_index, pptx_image in enumerate(pptx_content["images"], start=1):
                             pptx_image["id"] = f"{uploaded_file.name}:image_{image_index}"
+                            pptx_image["source"] = "pptx"
                             pptx_images.append(pptx_image)
                     else:
                         extracted_text = read_file(temporary_file.name)
@@ -803,16 +804,33 @@ if st.button(
 
             if use_ai:
                 with st.spinner("Organising your content with AI..."):
+                    # Limit the visual prompt to a manageable number of images.
+                    # Images outside this set are not considered for automatic placement.
+                    images_for_ai = pptx_images[:12]
                     image_context = "\n".join(
                         f"ID: {image['id']} | Name: {image['name']} | Slide: {image.get('slide_number')} | Context: {image.get('context', '')[:700]}"
-                        for image in pptx_images
+                        for image in images_for_ai
                     )
                     structured_report = structure_report(
                         report_text,
                         report_type=selected_template,
                         custom_instructions=custom_notes.strip() if custom_notes else None,
                         image_context=image_context or None,
+                        image_inputs=[
+                            {
+                                "id": image["id"],
+                                "data": image["data"],
+                                "mime_type": image.get("mime_type", "image/png"),
+                            }
+                            for image in images_for_ai
+                        ],
                     )
+
+                # Use the model's concise visual descriptions as figure captions.
+                generated_captions = getattr(structured_report, "image_captions", {}) or {}
+                for image in images_for_report:
+                    if image.get("id") in generated_captions:
+                        image["caption"] = generated_captions[image["id"]]
 
                 build_structured_report(
                     structured_report,
