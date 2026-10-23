@@ -350,8 +350,8 @@ with st.container(border=True):
 # Keep the existing report-generation functions working by joining the
 # readable sources with clear labels. The original source list is preserved
 # above for the upcoming combine-versus-distinct option.
-report_text = "\\n\\n".join(
-    f"===== SOURCE: {source['name']} =====\\n{source['text']}"
+report_text = "\n\n".join(
+    f"===== SOURCE: {source['name']} =====\n{source['text']}"
     for source in source_items
 )
 
