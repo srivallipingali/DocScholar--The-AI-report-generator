@@ -47,3 +47,7 @@ class StructuredReport(BaseModel):
         min_length=1,
         description="Report sections in the order they should appear.",
     )
+    image_captions: dict[str, str] = Field(
+        default_factory=dict,
+        description="Concise, accurate captions for selected source image IDs only.",
+    )
