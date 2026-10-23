@@ -237,3 +237,29 @@ def test_structured_report_uses_filename_when_image_caption_is_empty(tmp_path):
         paragraph.text for paragraph in document.paragraphs
     ]
     assert len(document.inline_shapes) == 1
+
+
+def test_unselected_pptx_images_are_not_added_to_fallback_section(tmp_path):
+    from io import BytesIO
+    from PIL import Image
+
+    image_buffer = BytesIO()
+    Image.new("RGB", (80, 50), color="green").save(image_buffer, format="PNG")
+
+    output_path = tmp_path / "report_selected_images_only.docx"
+    build_structured_report(
+        sample_report(),
+        sample_config(),
+        output_path,
+        images=[{
+            "id": "slide1:image_1",
+            "source": "pptx",
+            "name": "slide_1_image_1.png",
+            "data": image_buffer.getvalue(),
+            "caption": "A diagram",
+        }],
+    )
+
+    document = Document(output_path)
+    assert len(document.inline_shapes) == 0
+    assert "Uploaded Images" not in [p.text for p in document.paragraphs]
