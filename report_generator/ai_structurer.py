@@ -30,7 +30,7 @@ FALLBACK_MODELS = ["gemini-3.8-flash", "gemini-3.5-flash-lite"]
 MAX_INPUT_CHARACTERS = 60_000
 
 
-def build_prompt(source_text, report_type=None, custom_instructions=None):
+def build_prompt(source_text, report_type=None, custom_instructions=None, image_context=None):
     """Create the instruction that tells the model what to produce."""
 
     focus = f" The report should follow a {report_type} style." if report_type else ""
@@ -44,6 +44,14 @@ def build_prompt(source_text, report_type=None, custom_instructions=None):
             "tailoring, and structuring the report.\n\n"
         )
 
+    image_section = ""
+    if image_context:
+        image_section = (
+            "SOURCE IMAGES AND THEIR CONTEXT:\n"
+            f"{image_context}\n"
+            "For relevant images, add their exact IDs to the appropriate section image_ids list. Use only supplied IDs.\n\n"
+        )
+
     return (
         "You are an assistant that writes clear, well-organised reports."
         f"{focus}\n\n"
@@ -53,6 +61,7 @@ def build_prompt(source_text, report_type=None, custom_instructions=None):
         "Each section should cover a distinct topic so it can be presented as an "
         "individual topic page with its own heading in the table of contents.\n\n"
         f"{custom_section}"
+        f"{image_section}"
         "Rules:\n"
         "- Use only information from the source material. Do not invent "
         "facts, figures or citations.\n"
@@ -138,6 +147,7 @@ def structure_report(
     report_type=None,
     custom_instructions=None,
     generate=None,
+    image_context=None,
 ):
     """Convert raw text into a validated StructuredReport.
 
@@ -164,6 +174,7 @@ def structure_report(
         source_text.strip(),
         report_type=report_type,
         custom_instructions=custom_instructions,
+        image_context=image_context,
     )
     reply = generate(prompt)
 
