@@ -141,3 +141,33 @@ def test_missing_api_key_gives_clear_error(monkeypatch):
 
     with pytest.raises(RuntimeError, match="GEMINI_API_KEY"):
         structure_report("some text")
+
+
+def test_prompt_requests_visual_selection_and_concise_captions():
+    prompt = build_prompt(
+        "A report about DC generators.",
+        image_context="ID: slide1:image_1 | Slide: 1 | Context: Generator diagram",
+    )
+
+    assert "actual image files" in prompt
+    assert "decorative, irrelevant, redundant" in prompt
+    assert "image_captions" in prompt
+
+
+def test_parse_report_accepts_ai_image_captions():
+    reply = json.dumps({
+        "title": "DC Generator",
+        "sections": [{
+            "heading": "Construction",
+            "content": "The armature rotates in the magnetic field.",
+            "image_ids": ["slide1:image_1"],
+        }],
+        "image_captions": {
+            "slide1:image_1": "Labeled diagram of the generator's main components"
+        },
+    })
+
+    report = parse_report(reply)
+
+    assert report.sections[0].image_ids == ["slide1:image_1"]
+    assert report.image_captions["slide1:image_1"].startswith("Labeled diagram")
