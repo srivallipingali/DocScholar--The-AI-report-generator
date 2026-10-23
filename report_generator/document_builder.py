@@ -8,6 +8,7 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT, WD_TAB_LEADER
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
+from PIL import Image
 
 
 def _hex_color(value):
@@ -282,6 +283,22 @@ def _add_paragraphs(document, body):
             document.add_paragraph(cleaned_paragraph)
 
 
+def _fit_image_size(image_data, max_width=5.5, max_height=4.5):
+    """Return page-friendly image dimensions while preserving aspect ratio."""
+    try:
+        with Image.open(BytesIO(image_data)) as image:
+            width_px, height_px = image.size
+        if not width_px or not height_px:
+            raise ValueError("Image has no dimensions.")
+        aspect_ratio = width_px / height_px
+        width_inches = min(max_width, max_height * aspect_ratio)
+        height_inches = width_inches / aspect_ratio
+        return Inches(width_inches), Inches(height_inches)
+    except Exception:
+        # Let python-docx report invalid image data with the normal helpful error.
+        return Inches(max_width), None
+
+
 def _add_uploaded_images(document, images):
     """Append uploaded images with captions to the end of the report.
 
@@ -302,9 +319,11 @@ def _add_uploaded_images(document, images):
         paragraph = document.add_paragraph()
         paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
         try:
+            image_width, image_height = _fit_image_size(image_data, max_width=5.5, max_height=4.5)
             paragraph.add_run().add_picture(
                 BytesIO(image_data),
-                width=Inches(5.5),
+                width=image_width,
+                height=image_height,
             )
         except Exception as error:
             raise ValueError(
@@ -333,7 +352,14 @@ def _add_images_inline(document, images, start_index=1):
         paragraph = document.add_paragraph()
         paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
         try:
-            paragraph.add_run().add_picture(BytesIO(image["data"]), width=Inches(5.5))
+            image_width, image_height = _fit_image_size(
+                image["data"], max_width=5.5, max_height=4.5
+            )
+            paragraph.add_run().add_picture(
+                BytesIO(image["data"]),
+                width=image_width,
+                height=image_height,
+            )
         except Exception as error:
             raise ValueError(f"Could not insert image {image.get('name', index)}; use a valid image file.") from error
         caption_text = (image.get("caption") or "").strip() or image.get("name") or f"Figure {index}"
@@ -447,7 +473,13 @@ def build_structured_report(report, config, output_path, images=None):
                 placed_ids.add(str(image_id))
 
     # Unassigned images are preserved in a fallback section.
-    unplaced = [image for image in (images or []) if image.get("data") and (image.get("id") is None or str(image.get("id")) not in placed_ids)]
+    unplaced = [
+        image for image in (images or [])
+        if image.get("data")
+        and (image.get("id") is None or str(image.get("id")) not in placed_ids)
+        # PPTX images are included only when Gemini explicitly selects them.
+        and image.get("source") != "pptx"
+    ]
     _add_uploaded_images(document, unplaced)
 
     return _save(document, output_path)
