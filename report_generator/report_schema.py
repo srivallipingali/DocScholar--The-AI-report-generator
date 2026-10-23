@@ -20,9 +20,11 @@ class Section(BaseModel):
     )
     content: str = Field(
         min_length=1,
-        description=(
-            "Body text of the section. Separate paragraphs with a blank line."
-        ),
+        description="Body text of the section. Separate paragraphs with a blank line.",
+    )
+    image_ids: list[str] = Field(
+        default_factory=list,
+        description="IDs of source images that belong in this section. Use only supplied image IDs.",
     )
 
 
