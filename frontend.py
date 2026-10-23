@@ -13,6 +13,10 @@ from report_generator.document_builder import (
     build_structured_report,
 )
 from report_generator.file_reader import read_file
+from report_generator.online_images import (
+    download_wikimedia_image,
+    search_wikimedia_images,
+)
 from report_generator.template_loader import load_templates
 
 import os
@@ -339,6 +343,50 @@ with st.container(border=True):
                     "caption": image_caption.strip(),
                 }
             )
+
+    st.markdown("**Find optional images online**")
+    st.caption(
+        "Search Wikimedia Commons for images that can be reused under their "
+        "listed licenses. Check each image's license and attribution details."
+    )
+    online_image_query = st.text_input(
+        "Search topic",
+        placeholder="e.g. DC generator construction",
+        key="online_image_query",
+    )
+    if st.button("Search online images", key="search_online_images"):
+        if not online_image_query.strip():
+            st.warning("Enter a topic before searching.")
+        else:
+            try:
+                with st.spinner("Searching Wikimedia Commons..."):
+                    st.session_state["online_image_results"] = (
+                        search_wikimedia_images(online_image_query.strip())
+                    )
+                if not st.session_state["online_image_results"]:
+                    st.info("No suitable images were found. Try a shorter or different search.")
+            except Exception as error:
+                st.error(f"Online image search failed: {error}")
+
+    online_image_results = st.session_state.get("online_image_results", [])
+    if online_image_results:
+        st.caption("Select any images you want to include in your report.")
+        online_columns = st.columns(2)
+        for online_index, online_image in enumerate(online_image_results):
+            with online_columns[online_index % 2]:
+                st.image(online_image["thumbnail_url"], use_container_width=True)
+                st.markdown(f"**{escape(online_image['title'])}**")
+                if online_image.get("artist"):
+                    st.caption(f"Creator: {online_image['artist']}")
+                st.caption(
+                    "License: "
+                    + (online_image.get("license") or "Check source page")
+                )
+                st.markdown(f"[View source and license]({online_image['source_url']})")
+                st.checkbox(
+                    "Include this image",
+                    key=f"online_image_selected_{online_index}",
+                )
 
     if typed_text and typed_text.strip():
         source_items.append(
@@ -718,6 +766,32 @@ if st.button(
             # Generate the document in memory.
             document_bytes = BytesIO()
 
+            # Download only online images the user explicitly selected.
+            images_for_report = list(report_images)
+            online_results = st.session_state.get("online_image_results", [])
+            for online_index, online_image in enumerate(online_results):
+                if st.session_state.get(
+                    f"online_image_selected_{online_index}", False
+                ):
+                    image_bytes = download_wikimedia_image(online_image)
+                    attribution = online_image.get("title", "Online image")
+                    if online_image.get("artist"):
+                        attribution += f" | Creator: {online_image['artist']}"
+                    if online_image.get("license"):
+                        attribution += f" | License: {online_image['license']}"
+                    if online_image.get("license_url"):
+                        attribution += f" | License details: {online_image['license_url']}"
+                    attribution += f" | Source: {online_image['source_url']}"
+                    images_for_report.append(
+                        {
+                            "name": online_image.get("title", "online-image")
+                                .replace("File:", "")
+                                .replace("/", "-"),
+                            "data": image_bytes,
+                            "caption": attribution,
+                        }
+                    )
+
             if use_ai:
                 with st.spinner("Organising your content with AI..."):
                     structured_report = structure_report(
@@ -730,7 +804,7 @@ if st.button(
                     structured_report,
                     config,
                     document_bytes,
-                    images=report_images,
+                    images=images_for_report,
                 )
 
                 final_title = (
