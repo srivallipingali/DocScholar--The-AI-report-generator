@@ -8,6 +8,7 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT, WD_TAB_LEADER
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
+from PIL import Image
 
 
 def _hex_color(value):
@@ -67,7 +68,7 @@ def _create_styled_document(config):
 
     # Main report title style.
     title_style = document.styles["Title"]
-    title_style.font.name = font_name
+    title_style.font.name = config.get("title_font_name", font_name)
     title_style.font.size = Pt(
         config.get("title_font_size", 18)
     )
@@ -76,7 +77,7 @@ def _create_styled_document(config):
 
     # Section heading style.
     heading_style = document.styles["Heading 1"]
-    heading_style.font.name = font_name
+    heading_style.font.name = config.get("heading_font_name", font_name)
     heading_style.font.size = Pt(
         config.get("heading_font_size", 14)
     )
@@ -149,7 +150,7 @@ def _add_cover_page(document, title, config, subtitle=None, abstract=None):
 
     p_title = document.add_paragraph()
     title_run = p_title.add_run(title)
-    title_run.font.name = font_name
+    title_run.font.name = config.get("title_font_name", font_name)
     title_run.font.size = Pt(max(24, config.get("title_font_size", 18) + 8))
     title_run.font.bold = True
     title_run.font.color.rgb = accent
@@ -282,11 +283,27 @@ def _add_paragraphs(document, body):
             document.add_paragraph(cleaned_paragraph)
 
 
-def _add_uploaded_images(document, images):
-    """Append uploaded images with captions to the end of the report.
+def _fit_image_size(image_data, max_width=5.5, max_height=4.5):
+    """Return page-friendly image dimensions while preserving aspect ratio."""
+    try:
+        with Image.open(BytesIO(image_data)) as image:
+            width_px, height_px = image.size
+        if not width_px or not height_px:
+            raise ValueError("Image has no dimensions.")
+        aspect_ratio = width_px / height_px
+        width_inches = min(max_width, max_height * aspect_ratio)
+        height_inches = width_inches / aspect_ratio
+        return Inches(width_inches), Inches(height_inches)
+    except Exception:
+        # Let python-docx report invalid image data with the normal helpful error.
+        return Inches(max_width), None
+
+
+def _add_uploaded_images(document, images, start_index=1):
+    """Append unplaced images with captions to the end of the report.
 
     Each image is a dictionary with a filename, image bytes, and an optional
-    caption. Image placement inside individual AI sections can be added later.
+    caption.
     """
     if not images:
         return
@@ -294,7 +311,7 @@ def _add_uploaded_images(document, images):
     document.add_page_break()
     document.add_heading("Uploaded Images", level=1)
 
-    for index, image in enumerate(images, start=1):
+    for index, image in enumerate(images, start=start_index):
         image_data = image.get("data")
         if not image_data:
             continue
@@ -302,9 +319,11 @@ def _add_uploaded_images(document, images):
         paragraph = document.add_paragraph()
         paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
         try:
+            image_width, image_height = _fit_image_size(image_data, max_width=5.5, max_height=4.5)
             paragraph.add_run().add_picture(
                 BytesIO(image_data),
-                width=Inches(5.5),
+                width=image_width,
+                height=image_height,
             )
         except Exception as error:
             raise ValueError(
@@ -322,6 +341,43 @@ def _add_uploaded_images(document, images):
             style="Caption",
         )
         caption.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        attribution = (image.get("attribution") or "").strip()
+        if attribution and attribution != caption_text:
+            attribution_paragraph = document.add_paragraph(
+                f"Source: {attribution}",
+                style="Caption",
+            )
+            attribution_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+
+def _add_images_inline(document, images, start_index=1):
+    """Insert images at the current position with captions."""
+    for index, image in enumerate(images, start=start_index):
+        if not image.get("data"):
+            continue
+        paragraph = document.add_paragraph()
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        try:
+            image_width, image_height = _fit_image_size(
+                image["data"], max_width=5.5, max_height=4.5
+            )
+            paragraph.add_run().add_picture(
+                BytesIO(image["data"]),
+                width=image_width,
+                height=image_height,
+            )
+        except Exception as error:
+            raise ValueError(f"Could not insert image {image.get('name', index)}; use a valid image file.") from error
+        caption_text = (image.get("caption") or "").strip() or image.get("name") or f"Figure {index}"
+        caption = document.add_paragraph(f"Figure {index}. {caption_text}", style="Caption")
+        caption.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        attribution = (image.get("attribution") or "").strip()
+        if attribution and attribution != caption_text:
+            attribution_paragraph = document.add_paragraph(
+                f"Source: {attribution}",
+                style="Caption",
+            )
+            attribution_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
 
 def _save(document, output_path):
@@ -415,12 +471,31 @@ def build_structured_report(report, config, output_path, images=None):
             start_page=start_page,
         )
 
+    images_by_id = {str(image.get("id")): image for image in (images or []) if image.get("id") is not None}
+    placed_ids = set()
+
     for i, section in enumerate(report.sections):
         if section_per_page and i > 0:
             document.add_page_break()
         document.add_heading(section.heading, level=1)
         _add_paragraphs(document, section.content)
+        for image_id in getattr(section, "image_ids", []):
+            image_id = str(image_id)
+            image = images_by_id.get(image_id)
+            if image_id in placed_ids:
+                continue
+            if image and image.get("data"):
+                _add_images_inline(document, [image], start_index=len(placed_ids) + 1)
+                placed_ids.add(image_id)
 
-    _add_uploaded_images(document, images)
+    # Unassigned images are preserved in a fallback section.
+    unplaced = [
+        image for image in (images or [])
+        if image.get("data")
+        and (image.get("id") is None or str(image.get("id")) not in placed_ids)
+        # PPTX images are included only when Gemini explicitly selects them.
+        and image.get("source") != "pptx"
+    ]
+    _add_uploaded_images(document, unplaced, start_index=len(placed_ids) + 1)
 
     return _save(document, output_path)

@@ -13,10 +13,12 @@ from report_generator.document_builder import (
     build_structured_report,
 )
 from report_generator.file_reader import read_file
+from report_generator.pptx_reader import read_pptx
 from report_generator.online_images import (
     download_wikimedia_image,
     search_wikimedia_images,
 )
+from report_generator.template_inspiration import analyze_template
 from report_generator.template_loader import load_templates
 
 import os
@@ -302,6 +304,7 @@ st.markdown(
 # Keep each source separate in memory so a later step can let users
 # combine sources or ask the AI to keep them distinct.
 source_items = []
+pptx_images = []
 
 with st.container(border=True):
     typed_text = st.text_area(
@@ -312,22 +315,26 @@ with st.container(border=True):
 
     uploaded_files = st.file_uploader(
         "Upload source documents (optional)",
-        type=["pdf", "docx"],
+        type=["pdf", "docx", "pptx"],
         accept_multiple_files=True,
-        help="You can select multiple PDF and Word documents. Text and documents can be used together.",
+        help="You can select multiple PDF, Word, and PowerPoint documents. Text and documents can be used together.",
     )
 
     uploaded_images = st.file_uploader(
         "Upload images to include in the report (optional)",
         type=["png", "jpg", "jpeg"],
         accept_multiple_files=True,
-        help="PNG and JPG images will be added to an Uploaded Images section at the end of your Word report.",
+        help="With AI enabled, the AI can place relevant images in report sections. Otherwise, images appear at the end.",
         key="report_image_uploader",
     )
 
     report_images = []
     if uploaded_images:
-        st.caption("Images are currently added in a separate section at the end of the report.")
+        st.caption(
+            "In AI mode, relevant images may be placed beside matching sections. "
+            "Images the AI does not place are kept in an Uploaded Images section. "
+            "AI visually reviews up to 12 images."
+        )
         for image_index, uploaded_image in enumerate(uploaded_images, start=1):
             image_bytes = uploaded_image.getvalue()
             st.image(image_bytes, caption=uploaded_image.name, width=180)
@@ -338,6 +345,8 @@ with st.container(border=True):
             )
             report_images.append(
                 {
+                    "id": f"user-upload:{image_index}",
+                    "source": "upload",
                     "name": uploaded_image.name,
                     "data": image_bytes,
                     "caption": image_caption.strip(),
@@ -407,7 +416,15 @@ with st.container(border=True):
                 ) as temporary_file:
                     temporary_file.write(uploaded_file.getvalue())
                     temporary_file.flush()
-                    extracted_text = read_file(temporary_file.name)
+                    if suffix.lower() == ".pptx":
+                        pptx_content = read_pptx(temporary_file.name)
+                        extracted_text = pptx_content["text"]
+                        for image_index, pptx_image in enumerate(pptx_content["images"], start=1):
+                            pptx_image["id"] = f"{uploaded_file.name}:image_{image_index}"
+                            pptx_image["source"] = "pptx"
+                            pptx_images.append(pptx_image)
+                    else:
+                        extracted_text = read_file(temporary_file.name)
 
                 source_items.append(
                     {
@@ -496,6 +513,7 @@ with st.container(border=True):
             ),
             help="Gemini will read your instructions and tailor the structure, tone, and emphasis of the report accordingly.",
         )
+    template_instructions = ""
 
     st.markdown("<p style='color: #4c227d; font-weight: 600; margin-top: 10px; margin-bottom: 4px;'>Document Layout & Structure</p>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns(3)
@@ -548,9 +566,51 @@ with st.container(border=True):
         st.session_state["selected_template"] = template_names[0]
 
     st.markdown("### Choose a report template")
-    st.caption("Select a style or expand its preview to see a sample page.")
+    st.caption("Choose a built-in theme or upload your own DOCX/PDF as a style reference.")
 
-    template_columns = st.columns(2)
+    template_choice = st.radio(
+        "Template source",
+        ["Built-in theme", "Upload my own template"],
+        horizontal=True,
+        key="template_source_choice",
+    )
+    use_builtin_template = template_choice == "Built-in theme"
+    template_file = None
+    if use_builtin_template:
+        st.caption("Select a style or expand its preview to see a sample page.")
+    else:
+        template_file = st.file_uploader(
+            "Upload your template for inspiration",
+            type=["docx", "pdf"],
+            help=(
+                "The new report will use approximate formatting from this file. "
+                "Its subject matter will not be used as report source content."
+            ),
+            key="template_inspiration_uploader",
+        )
+        if template_file:
+            st.success(f"Custom template selected: {template_file.name}")
+            if use_ai:
+                template_instructions = st.text_area(
+                    "Instructions for your uploaded template (optional)",
+                    height=80,
+                    placeholder=(
+                        "e.g. Keep the same formal tone, use short numbered sections, "
+                        "and make the title page minimal."
+                    ),
+                    help=(
+                        "These instructions guide the new report's style and organization. "
+                        "The uploaded template's subject matter is not copied."
+                    ),
+                    key="template_inspiration_instructions",
+                )
+            else:
+                st.caption(
+                    "Turn on AI to add instructions for the template's tone and structure."
+                )
+
+    template_names = list(templates) if use_builtin_template else []
+    template_columns = st.columns(2) if template_names else []
     for index, template_name in enumerate(template_names):
         settings = templates[template_name]
         selected = st.session_state["selected_template"] == template_name
@@ -716,6 +776,9 @@ with st.container(border=True):
                 )
 
     selected_template = st.session_state["selected_template"]
+    active_template_name = (
+        selected_template if use_builtin_template else "Custom Template"
+    )
 
 
 # --------------------------------------------------
@@ -743,6 +806,9 @@ if st.button(
     if not report_text.strip():
         st.error("Please enter some text or upload a readable document.")
 
+    elif not use_builtin_template and not template_file:
+        st.error("Upload a DOCX or PDF template, or choose a built-in theme.")
+
     elif not use_ai and not report_title.strip():
         st.error("Please enter a title for your report.")
 
@@ -752,13 +818,25 @@ if st.button(
             config = load_config(CONFIG_PATH)
 
             # Apply the selected template's formatting.
-            config.update(templates[selected_template])
+            if use_builtin_template:
+                config.update(templates[selected_template])
+            template_style_reference = None
+            if template_file:
+                with tempfile.NamedTemporaryFile(
+                    suffix=Path(template_file.name).suffix,
+                    delete=True,
+                ) as temporary_template:
+                    temporary_template.write(template_file.getvalue())
+                    temporary_template.flush()
+                    template_inspiration = analyze_template(temporary_template.name)
+                config.update(template_inspiration["formatting"])
+                template_style_reference = template_inspiration["style_reference"]
 
             # Use the title entered by the user (may be empty when using AI,
             # in which case the AI's suggested title is used instead).
             config["report_title"] = report_title.strip()
             config["author"] = author_name.strip()
-            config["template_name"] = selected_template
+            config["template_name"] = active_template_name
             config["include_cover_page"] = include_cover_page
             config["include_index"] = include_index
             config["section_per_page"] = section_per_page
@@ -767,7 +845,7 @@ if st.button(
             document_bytes = BytesIO()
 
             # Download only online images the user explicitly selected.
-            images_for_report = list(report_images)
+            images_for_report = list(report_images) + list(pptx_images)
             online_results = st.session_state.get("online_image_results", [])
             for online_index, online_image in enumerate(online_results):
                 if st.session_state.get(
@@ -784,21 +862,56 @@ if st.button(
                     attribution += f" | Source: {online_image['source_url']}"
                     images_for_report.append(
                         {
+                            "id": f"wikimedia:{online_index}",
+                            "source": "wikimedia",
                             "name": online_image.get("title", "online-image")
                                 .replace("File:", "")
                                 .replace("/", "-"),
                             "data": image_bytes,
                             "caption": attribution,
+                            "attribution": attribution,
                         }
                     )
 
             if use_ai:
                 with st.spinner("Organising your content with AI..."):
+                    # Prioritise images explicitly uploaded or selected by the user.
+                    images_for_ai = images_for_report[:12]
+                    image_context = "\n".join(
+                        f"ID: {image['id']} | Source: {image.get('source', 'upload')} | "
+                        f"Name: {image['name']} | Slide: {image.get('slide_number', 'n/a')} | "
+                        f"Context: {image.get('context', '')[:700]}"
+                        for image in images_for_ai
+                    )
                     structured_report = structure_report(
                         report_text,
-                        report_type=selected_template,
+                        report_type=active_template_name,
                         custom_instructions=custom_notes.strip() if custom_notes else None,
+                        image_context=image_context or None,
+                        style_reference=template_style_reference,
+                        template_instructions=template_instructions.strip() or None,
+                        image_inputs=[
+                            {
+                                "id": image["id"],
+                                "data": image["data"],
+                                "mime_type": image.get("mime_type", "image/png"),
+                            }
+                            for image in images_for_ai
+                        ],
                     )
+
+                # Use the model's concise visual descriptions as figure captions.
+                generated_captions = getattr(structured_report, "image_captions", {}) or {}
+                selected_image_ids = {
+                    str(image_id)
+                    for section in structured_report.sections
+                    for image_id in section.image_ids
+                }
+                for image in images_for_report:
+                    image_id = str(image.get("id", ""))
+                    if image_id in selected_image_ids and image_id in generated_captions:
+                        if image.get("source") != "upload" or not image.get("caption"):
+                            image["caption"] = generated_captions[image_id]
 
                 build_structured_report(
                     structured_report,
@@ -832,7 +945,7 @@ if st.button(
                 + ".docx"
             )
 
-            st.session_state["generated_template"] = selected_template
+            st.session_state["generated_template"] = active_template_name
 
             st.success("Your report has been generated successfully!")
 
