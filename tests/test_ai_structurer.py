@@ -4,6 +4,7 @@ import pytest
 
 from report_generator.ai_structurer import (
     MAX_INPUT_CHARACTERS,
+    _GeminiStructuredReport,
     build_prompt,
     parse_report,
     structure_report,
@@ -83,6 +84,19 @@ def test_prompt_includes_custom_instructions():
     assert "USER'S SPECIAL INSTRUCTIONS" in prompt
 
 
+def test_prompt_uses_uploaded_template_only_as_style_reference():
+    prompt = build_prompt(
+        "Use only verified source facts.",
+        style_reference="body font: Arial; heading hierarchy: Heading 1",
+        template_instructions="Use numbered sections and a restrained tone.",
+    )
+
+    assert "body font: Arial" in prompt
+    assert "Use numbered sections and a restrained tone." in prompt
+    assert "inspiration only; not report source material" in prompt
+    assert "Do not copy its wording, facts, names, or subject matter" in prompt
+
+
 # ---------- structure_report (with a fake model) ----------
 
 def test_structure_report_uses_generate_function():
@@ -152,6 +166,8 @@ def test_prompt_requests_visual_selection_and_concise_captions():
     assert "actual image files" in prompt
     assert "decorative, irrelevant, redundant" in prompt
     assert "image_captions" in prompt
+    assert "names and nearby source text are clues, not proof" in prompt
+    assert "leave image_ids empty" in prompt
 
 
 def test_parse_report_accepts_ai_image_captions():
@@ -171,3 +187,73 @@ def test_parse_report_accepts_ai_image_captions():
 
     assert report.sections[0].image_ids == ["slide1:image_1"]
     assert report.image_captions["slide1:image_1"].startswith("Labeled diagram")
+
+
+def test_parse_report_normalizes_gemini_caption_entries():
+    reply = json.dumps({
+        "title": "DC Generator",
+        "sections": [{
+            "heading": "Construction",
+            "content": "The armature rotates in the magnetic field.",
+            "image_ids": ["slide1:image_1"],
+        }],
+        "image_captions": [{
+            "image_id": "slide1:image_1",
+            "caption": "Labeled diagram of the generator",
+        }],
+    })
+
+    report = parse_report(reply)
+
+    assert report.image_captions == {
+        "slide1:image_1": "Labeled diagram of the generator"
+    }
+
+
+def test_gemini_response_schema_avoids_unsupported_dynamic_properties():
+    schema = _GeminiStructuredReport.model_json_schema()
+
+    def contains_additional_properties(value):
+        if isinstance(value, dict):
+            return "additionalProperties" in value or any(
+                contains_additional_properties(item)
+                for item in value.values()
+            )
+        if isinstance(value, list):
+            return any(contains_additional_properties(item) for item in value)
+        return False
+
+    assert not contains_additional_properties(schema)
+    assert schema["properties"]["image_captions"]["type"] == "array"
+
+
+def test_structure_report_only_assigns_supplied_images_once():
+    reply = json.dumps({
+        "title": "DC Generator",
+        "sections": [
+            {
+                "heading": "Construction",
+                "content": "The generator has an armature.",
+                "image_ids": ["known-image", "unknown-image"],
+            },
+            {
+                "heading": "Operation",
+                "content": "The armature rotates.",
+                "image_ids": ["known-image"],
+            },
+        ],
+        "image_captions": {
+            "known-image": "Visible generator components",
+            "unknown-image": "An unrelated image",
+        },
+    })
+
+    report = structure_report(
+        "A DC generator report.",
+        generate=lambda prompt: reply,
+        image_inputs=[{"id": "known-image", "data": b"image"}],
+    )
+
+    assert report.sections[0].image_ids == ["known-image"]
+    assert report.sections[1].image_ids == []
+    assert report.image_captions == {"known-image": "Visible generator components"}

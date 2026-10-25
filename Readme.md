@@ -15,6 +15,7 @@ a titled report with sections, and a template controls the final formatting
         |
         v
   ai_structurer.py      Gemini -> JSON -> validated StructuredReport
+                        (can visually match supplied images to sections)
         |               (report_schema.py defines the shape)
         v
   document_builder.py   apply template formatting, write the .docx
@@ -31,6 +32,14 @@ Design choices worth knowing:
   matches a Pydantic schema, and the reply is re-checked before use.
 - **Templates are data.** Formatting lives in `config/templates.json`, so a
   new report style needs no code change.
+- **Images are matched to report sections.** In AI mode, Gemini can inspect up
+  to 12 uploaded, selected Wikimedia, or PowerPoint images and place relevant
+  images beside matching sections. Unplaced user-provided images remain in an
+  images section; PowerPoint images are included only when selected by the AI.
+- **Custom templates provide inspiration.** Upload a DOCX or PDF report as a
+  style reference and optionally tell the AI how to use its tone or structure.
+  The app extracts formatting cues for the new report without using the
+  template's subject matter as source content.
 
 ## Setup
 

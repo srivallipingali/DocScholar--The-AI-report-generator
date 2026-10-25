@@ -263,3 +263,47 @@ def test_unselected_pptx_images_are_not_added_to_fallback_section(tmp_path):
     document = Document(output_path)
     assert len(document.inline_shapes) == 0
     assert "Uploaded Images" not in [p.text for p in document.paragraphs]
+
+
+def test_selected_image_is_placed_once_and_keeps_its_attribution(tmp_path):
+    from io import BytesIO
+    from PIL import Image
+
+    image_buffer = BytesIO()
+    Image.new("RGB", (80, 50), color="purple").save(image_buffer, format="PNG")
+    image = {
+        "id": "wikimedia:0",
+        "source": "wikimedia",
+        "name": "generator.png",
+        "data": image_buffer.getvalue(),
+        "caption": "A labeled diagram of a DC generator",
+        "attribution": "File:Generator.png | Creator: Example | Source: Wikimedia Commons",
+    }
+    unplaced_image = {
+        "id": "user-upload:1",
+        "source": "upload",
+        "name": "extra.png",
+        "data": image_buffer.getvalue(),
+        "caption": "An extra image",
+    }
+    report = sample_report()
+    report.sections[0].image_ids = ["wikimedia:0"]
+    report.sections[1].image_ids = ["wikimedia:0"]
+    output_path = tmp_path / "report_with_attributed_image.docx"
+
+    build_structured_report(
+        report,
+        sample_config(),
+        output_path,
+        images=[image, unplaced_image],
+    )
+
+    document = Document(output_path)
+    paragraph_text = [paragraph.text for paragraph in document.paragraphs]
+    assert len(document.inline_shapes) == 2
+    assert "Figure 1. A labeled diagram of a DC generator" in paragraph_text
+    assert "Figure 2. An extra image" in paragraph_text
+    assert (
+        "Source: File:Generator.png | Creator: Example | Source: Wikimedia Commons"
+        in paragraph_text
+    )
