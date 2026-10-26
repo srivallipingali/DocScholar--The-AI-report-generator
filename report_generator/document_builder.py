@@ -483,7 +483,7 @@ def build_report(
 
     include_cover = config.get("include_cover_page", False)
 
-    if include_cover:
+    if include_cover and not template_bytes:
         _configure_page_numbering(document)
 
     if include_cover:
@@ -516,6 +516,7 @@ def build_structured_report(
         raise ValueError("Cannot generate a report with no sections.")
 
     output_path = _prepare_output(output_path)
+    title = (config.get("report_title") or "").strip() or report.title
     document = _create_styled_document(
         config, template_bytes=template_bytes, template_mode=template_mode
     )
@@ -546,7 +547,7 @@ def build_structured_report(
     include_index = config.get("include_index", False)
     section_per_page = config.get("section_per_page", False)
 
-    if include_cover or include_index:
+    if (include_cover or include_index) and not template_bytes:
         _configure_page_numbering(document)
 
     title = (config.get("report_title") or "").strip() or report.title
