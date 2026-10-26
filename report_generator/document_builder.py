@@ -7,6 +7,7 @@ from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT, WD_TAB_LEADER
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
+from docx.text.paragraph import Paragraph
 from docx.shared import Inches, Pt, RGBColor
 from PIL import Image
 
@@ -34,7 +35,64 @@ def _prepare_output(output_path):
     return output_path
 
 
-def _create_styled_document(config, template_bytes=None):
+def _insert_paragraph_after(anchor, text="", style=None):
+    paragraph = anchor._parent.add_paragraph(text, style=style)
+    element = paragraph._p
+    element.getparent().remove(element)
+    anchor._p.addnext(element)
+    return Paragraph(element, anchor._parent)
+
+
+def _clear_template_body(document):
+    body = document._element.body
+    section_properties = body.sectPr
+    for child in list(body):
+        if child is not section_properties:
+            body.remove(child)
+
+
+def _fill_template_placeholders(document, title, plain_text=None, report=None):
+    """Fill [REPORT_TITLE] and [REPORT_CONTENT] placeholders in an uploaded DOCX."""
+    title_tokens = ("[REPORT_TITLE]", "{{REPORT_TITLE}}", "[TITLE]", "{{TITLE}}")
+    content_tokens = ("[REPORT_CONTENT]", "{{REPORT_CONTENT}}", "[CONTENT]", "{{CONTENT}}")
+    content_filled = False
+    for paragraph in list(document.paragraphs):
+        original = paragraph.text
+        replaced = original
+        for token in title_tokens:
+            replaced = replaced.replace(token, title)
+        if replaced != original:
+            paragraph.text = replaced
+        current = paragraph.text.strip()
+        token = next((candidate for candidate in content_tokens if candidate in current), None)
+        if token is None:
+            continue
+        before, _, after = current.partition(token)
+        paragraph.text = before
+        anchor = paragraph
+        if report is not None:
+            for section in report.sections:
+                anchor = _insert_paragraph_after(anchor, section.heading, style="Heading 1")
+                for item in str(section.content or "").splitlines():
+                    if item.strip():
+                        anchor = _insert_paragraph_after(anchor, item.strip())
+        else:
+            for item in str(plain_text or "").splitlines():
+                if item.strip():
+                    anchor = _insert_paragraph_after(anchor, item.strip())
+        if after.strip():
+            _insert_paragraph_after(anchor, after.strip())
+        if not before:
+            paragraph._element.getparent().remove(paragraph._element)
+        content_filled = True
+    if not content_filled:
+        raise ValueError(
+            "No content placeholder was found. Add [REPORT_CONTENT] or "
+            "{{REPORT_CONTENT}} to your Word template, or choose replace-body mode."
+        )
+
+
+def _create_styled_document(config, template_bytes=None, template_mode="replace_body"):
     """Create a report document, optionally using an uploaded DOCX as its base.
 
     When template_bytes is supplied, keep the uploaded document's styles,
@@ -44,11 +102,8 @@ def _create_styled_document(config, template_bytes=None):
 
     if template_bytes:
         document = Document(BytesIO(template_bytes))
-        body = document._element.body
-        section_properties = body.sectPr
-        for child in list(body):
-            if child is not section_properties:
-                body.remove(child)
+        if template_mode == "replace_body":
+            _clear_template_body(document)
         # The template already owns its margins, styles and theme. Do not
         # overwrite those with the built-in template configuration.
         return document
@@ -399,7 +454,10 @@ def _save(document, output_path):
     return output_path
 
 
-def build_report(text, config, output_path, images=None, template_bytes=None):
+def build_report(
+    text, config, output_path, images=None, template_bytes=None,
+    template_mode="replace_body",
+):
     """
     Create a formatted Word report from plain text (no AI involved).
 
@@ -415,7 +473,13 @@ def build_report(text, config, output_path, images=None, template_bytes=None):
         raise ValueError("A report title is required.")
 
     output_path = _prepare_output(output_path)
-    document = _create_styled_document(config, template_bytes=template_bytes)
+    document = _create_styled_document(
+        config, template_bytes=template_bytes, template_mode=template_mode
+    )
+    if template_bytes and template_mode == "fill_placeholders":
+        _fill_template_placeholders(document, title, plain_text=text.strip())
+        _add_uploaded_images(document, images)
+        return _save(document, output_path)
 
     include_cover = config.get("include_cover_page", False)
 
@@ -433,7 +497,10 @@ def build_report(text, config, output_path, images=None, template_bytes=None):
     return _save(document, output_path)
 
 
-def build_structured_report(report, config, output_path, images=None, template_bytes=None):
+def build_structured_report(
+    report, config, output_path, images=None, template_bytes=None,
+    template_mode="replace_body",
+):
     """
     Create a formatted Word report from a StructuredReport (the AI path).
 
@@ -449,7 +516,31 @@ def build_structured_report(report, config, output_path, images=None, template_b
         raise ValueError("Cannot generate a report with no sections.")
 
     output_path = _prepare_output(output_path)
-    document = _create_styled_document(config, template_bytes=template_bytes)
+    document = _create_styled_document(
+        config, template_bytes=template_bytes, template_mode=template_mode
+    )
+    if template_bytes and template_mode == "fill_placeholders":
+        _fill_template_placeholders(document, title, report=report)
+        images_by_id = {
+            str(image.get("id")): image for image in (images or [])
+            if image.get("id") is not None
+        }
+        placed_ids = set()
+        for section in report.sections:
+            for image_id in getattr(section, "image_ids", []):
+                image_id = str(image_id)
+                image = images_by_id.get(image_id)
+                if image and image.get("data") and image_id not in placed_ids:
+                    _add_images_inline(document, [image], start_index=len(placed_ids) + 1)
+                    placed_ids.add(image_id)
+        unplaced = [
+            image for image in (images or [])
+            if image.get("data")
+            and (image.get("id") is None or str(image.get("id")) not in placed_ids)
+            and image.get("source") != "pptx"
+        ]
+        _add_uploaded_images(document, unplaced, start_index=len(placed_ids) + 1)
+        return _save(document, output_path)
 
     include_cover = config.get("include_cover_page", False)
     include_index = config.get("include_index", False)
