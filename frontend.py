@@ -566,7 +566,7 @@ with st.container(border=True):
         st.session_state["selected_template"] = template_names[0]
 
     st.markdown("### Choose a report template")
-    st.caption("Choose a built-in theme or upload your own DOCX/PDF as a style reference.")
+    st.caption("Choose a built-in theme, use a DOCX as the actual report template, or upload a PDF as a style reference.")
 
     template_choice = st.radio(
         "Template source",
@@ -580,14 +580,35 @@ with st.container(border=True):
         st.caption("Select a style or expand its preview to see a sample page.")
     else:
         template_file = st.file_uploader(
-            "Upload your template for inspiration",
+            "Upload your Word template or PDF style reference",
             type=["docx", "pdf"],
             help=(
-                "The new report will use approximate formatting from this file. "
-                "Its subject matter will not be used as report source content."
+                "DOCX: use the existing Word document as the report base, preserving its styles, "
+                "page setup, headers and footers while replacing its old body content. "
+                "PDF: use approximate formatting as a style reference."
             ),
             key="template_inspiration_uploader",
         )
+        custom_docx_template = bool(
+            template_file and Path(template_file.name).suffix.lower() == ".docx"
+        )
+        if custom_docx_template:
+            custom_docx_mode = st.radio(
+                "How should DocScholar use this Word file?",
+                [
+                    "Fill placeholders in my Word template",
+                    "Replace old report body with new report",
+                    "Use only as style inspiration",
+                ],
+                index=0,
+                help=(
+                    "Fill placeholders: add [REPORT_TITLE] and [REPORT_CONTENT] in your DOCX to keep the existing body layout and graphics. "
+                    "Replace old body: retain styles, page setup, headers and footers, but body-anchored graphics may be removed."
+                ),
+                key="custom_docx_mode",
+            )
+        else:
+            custom_docx_mode = "Use only as style inspiration"
         if template_file:
             st.success(f"Custom template selected: {template_file.name}")
             if use_ai:
@@ -918,6 +939,18 @@ if st.button(
                     config,
                     document_bytes,
                     images=images_for_report,
+                    template_bytes=(
+                        template_file.getvalue()
+                        if template_file
+                        and Path(template_file.name).suffix.lower() == ".docx"
+                        and custom_docx_mode != "Use only as style inspiration"
+                        else None
+                    ),
+                    template_mode=(
+                        "fill_placeholders"
+                        if custom_docx_mode == "Fill placeholders in my Word template"
+                        else "replace_body"
+                    ),
                 )
 
                 final_title = (
@@ -930,6 +963,18 @@ if st.button(
                     config,
                     document_bytes,
                     images=report_images,
+                    template_bytes=(
+                        template_file.getvalue()
+                        if template_file
+                        and Path(template_file.name).suffix.lower() == ".docx"
+                        and custom_docx_mode != "Use only as style inspiration"
+                        else None
+                    ),
+                    template_mode=(
+                        "fill_placeholders"
+                        if custom_docx_mode == "Fill placeholders in my Word template"
+                        else "replace_body"
+                    ),
                 )
 
                 final_title = report_title.strip()
