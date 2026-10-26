@@ -596,13 +596,14 @@ with st.container(border=True):
             custom_docx_mode = st.radio(
                 "How should DocScholar use this Word file?",
                 [
-                    "Use as the actual Word template (replace old report body)",
+                    "Fill placeholders in my Word template",
+                    "Replace old report body with new report",
                     "Use only as style inspiration",
                 ],
                 index=0,
                 help=(
-                    "Actual-template mode keeps the document's styles, page setup, headers and footers. "
-                    "The old body content—including placeholder/sample text—is replaced by the new report."
+                    "Fill placeholders: add [REPORT_TITLE] and [REPORT_CONTENT] in your DOCX. "
+                    "Replace old body: retain styles, page setup, headers and footers while replacing body content."
                 ),
                 key="custom_docx_mode",
             )
@@ -942,8 +943,13 @@ if st.button(
                         template_file.getvalue()
                         if template_file
                         and Path(template_file.name).suffix.lower() == ".docx"
-                        and custom_docx_mode.startswith("Use as the actual")
+                        and custom_docx_mode != "Use only as style inspiration"
                         else None
+                    ),
+                    template_mode=(
+                        "fill_placeholders"
+                        if custom_docx_mode == "Fill placeholders in my Word template"
+                        else "replace_body"
                     ),
                 )
 
@@ -961,8 +967,13 @@ if st.button(
                         template_file.getvalue()
                         if template_file
                         and Path(template_file.name).suffix.lower() == ".docx"
-                        and custom_docx_mode.startswith("Use as the actual")
+                        and custom_docx_mode != "Use only as style inspiration"
                         else None
+                    ),
+                    template_mode=(
+                        "fill_placeholders"
+                        if custom_docx_mode == "Fill placeholders in my Word template"
+                        else "replace_body"
                     ),
                 )
 
