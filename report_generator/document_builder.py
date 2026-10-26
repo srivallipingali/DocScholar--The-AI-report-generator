@@ -34,13 +34,24 @@ def _prepare_output(output_path):
     return output_path
 
 
-def _create_styled_document(config):
-    """Create an empty Word document with the template's formatting applied.
+def _create_styled_document(config, template_bytes=None):
+    """Create a report document, optionally using an uploaded DOCX as its base.
 
-    Both build_report (plain text) and build_structured_report (AI sections)
-    start from this, so the look of a template is defined in exactly one
-    place.
+    When template_bytes is supplied, keep the uploaded document's styles,
+    page setup, headers and footers, but remove its old body content so the
+    newly generated report does not mix with the previous report.
     """
+
+    if template_bytes:
+        document = Document(BytesIO(template_bytes))
+        body = document._element.body
+        section_properties = body.sectPr
+        for child in list(body):
+            if child is not section_properties:
+                body.remove(child)
+        # The template already owns its margins, styles and theme. Do not
+        # overwrite those with the built-in template configuration.
+        return document
 
     document = Document()
 
@@ -388,7 +399,7 @@ def _save(document, output_path):
     return output_path
 
 
-def build_report(text, config, output_path, images=None):
+def build_report(text, config, output_path, images=None, template_bytes=None):
     """
     Create a formatted Word report from plain text (no AI involved).
 
@@ -404,7 +415,7 @@ def build_report(text, config, output_path, images=None):
         raise ValueError("A report title is required.")
 
     output_path = _prepare_output(output_path)
-    document = _create_styled_document(config)
+    document = _create_styled_document(config, template_bytes=template_bytes)
 
     include_cover = config.get("include_cover_page", False)
 
@@ -422,7 +433,7 @@ def build_report(text, config, output_path, images=None):
     return _save(document, output_path)
 
 
-def build_structured_report(report, config, output_path, images=None):
+def build_structured_report(report, config, output_path, images=None, template_bytes=None):
     """
     Create a formatted Word report from a StructuredReport (the AI path).
 
@@ -438,7 +449,7 @@ def build_structured_report(report, config, output_path, images=None):
         raise ValueError("Cannot generate a report with no sections.")
 
     output_path = _prepare_output(output_path)
-    document = _create_styled_document(config)
+    document = _create_styled_document(config, template_bytes=template_bytes)
 
     include_cover = config.get("include_cover_page", False)
     include_index = config.get("include_index", False)
