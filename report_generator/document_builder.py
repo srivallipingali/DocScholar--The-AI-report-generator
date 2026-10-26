@@ -36,7 +36,12 @@ def _prepare_output(output_path):
 
 
 def _insert_paragraph_after(anchor, text="", style=None):
-    paragraph = anchor._parent.add_paragraph(text, style=style)
+    # Uploaded DOCX templates may omit built-in styles such as Heading 1.
+    # Try the requested style first, then gracefully fall back to Normal.
+    try:
+        paragraph = anchor._parent.add_paragraph(text, style=style)
+    except KeyError:
+        paragraph = anchor._parent.add_paragraph(text)
     element = paragraph._p
     element.getparent().remove(element)
     anchor._p.addnext(element)
