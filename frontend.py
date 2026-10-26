@@ -602,8 +602,8 @@ with st.container(border=True):
                 ],
                 index=0,
                 help=(
-                    "Fill placeholders: add [REPORT_TITLE] and [REPORT_CONTENT] in your DOCX. "
-                    "Replace old body: retain styles, page setup, headers and footers while replacing body content."
+                    "Fill placeholders: add [REPORT_TITLE] and [REPORT_CONTENT] in your DOCX to keep the existing body layout and graphics. "
+                    "Replace old body: retain styles, page setup, headers and footers, but body-anchored graphics may be removed."
                 ),
                 key="custom_docx_mode",
             )
